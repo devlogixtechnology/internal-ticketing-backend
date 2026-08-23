@@ -4,6 +4,7 @@ from django.contrib.auth.views import LoginView
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView
+from django.contrib.auth import logout
 
 from .forms import SignupForm
 
@@ -22,3 +23,8 @@ class SignupView(CreateView):
 class CustomLoginView(LoginView):
     template_name = 'accounts/login.html'
     redirect_authenticated_user = True
+
+def custom_logout_view(request):
+    logout(request)
+    messages.info(request, "You have been logged out successfully.")
+    return redirect('accounts:login')

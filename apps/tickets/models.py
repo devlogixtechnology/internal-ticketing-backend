@@ -49,6 +49,24 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"#{self.id} - {self.title}"
+    def can_transition_to(self, user, new_status):
+        if user.role == 'ADMIN' or user.is_superuser:
+            return True
+
+        # Support Team Workflow: OPEN -> IN_PROGRESS -> RESOLVED
+        if user.role == 'SUPPORT' and self.assigned_to == user:
+            allowed = {
+                self.Status.OPEN: [self.Status.IN_PROGRESS],
+                self.Status.IN_PROGRESS: [self.Status.RESOLVED],
+            }
+            return new_status in allowed.get(self.status, [])
+
+        # Employee Workflow: RESOLVED -> CLOSED 
+        if user.role == 'EMPLOYEE' and self.created_by == user:
+            if self.status == self.Status.RESOLVED and new_status == self.Status.CLOSED:
+                return True
+
+        return False
 
 
 class TicketComment(models.Model):

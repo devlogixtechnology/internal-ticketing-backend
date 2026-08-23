@@ -11,20 +11,24 @@ class SignupForm(UserCreationForm):
         empty_label="Select Department"
     )
 
-    class Meta:
+    class Meta(UserCreationForm.Meta):
         model = CustomUser
-        fields = ('username', 'email', 'department', 'password1', 'password2')
+        fields = ('username', 'email', 'department')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
+        for field_name, field in self.fields.items():
             field.widget.attrs.update({'class': 'form-control'})
 
     def save(self, commit=True):
         user = super().save(commit=False)
         user.email = self.cleaned_data['email']
         user.department = self.cleaned_data.get('department')
-        user.role = CustomUser.Role.EMPLOYEE  # strictly enforced
+        if hasattr(CustomUser, 'Role'):
+            user.role = CustomUser.Role.EMPLOYEE
+        else:
+            user.role = 'EMPLOYEE'
+
         if commit:
             user.save()
         return user
