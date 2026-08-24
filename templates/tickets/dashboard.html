@@ -188,7 +188,20 @@
                         {% for ticket in tickets %}
                         <tr>
                             <td class="fw-bold">#{{ ticket.id }}</td>
-                            <td class="fw-semibold">{{ ticket.title }}</td>
+                            <td class="fw-semibold">
+                                <button type="button" class="btn btn-link p-0 text-start fw-semibold text-decoration-none"
+                                        data-bs-toggle="modal" data-bs-target="#ticketDetailModal{{ ticket.id }}">
+                                    {{ ticket.title }}
+                                </button>
+                                {% if ticket.attachments.count > 0 %}
+                                    <br>
+                                    {% for attachment in ticket.attachments.all %}
+                                        <a href="{{ attachment.file.url }}" target="_blank" class="badge bg-light text-primary border text-decoration-none">
+                                            📎 {{ attachment.filename }}
+                                        </a>
+                                    {% endfor %}
+                                {% endif %}
+                            </td>
                             <td><span class="badge bg-light text-dark border">{{ ticket.category.name }}</span></td>
                             <td>
                                 {% if ticket.priority == 'CRITICAL' or ticket.priority == 'HIGH' %}
@@ -226,6 +239,11 @@
                             {% endif %}
 
                             <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-dark me-1 fw-semibold"
+                                        data-bs-toggle="modal" data-bs-target="#ticketDetailModal{{ ticket.id }}">
+                                    View details
+                                </button>
+
                                 <!-- Admin Only: Assign Support Agent -->
                                 {% if user_role == 'ADMIN' or user.is_superuser %}
                                 <button class="btn btn-sm btn-outline-primary me-1 fw-semibold" 
@@ -256,6 +274,38 @@
     </div>
 </div>
 
+{% for ticket in tickets %}
+<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <div>
+                    <span class="text-muted small">Ticket #{{ ticket.id }}</span>
+                    <h5 class="modal-title fw-bold mb-0">{{ ticket.title }}</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="fw-bold">Description</h6>
+                <p class="text-muted" style="white-space: pre-wrap;">{{ ticket.description }}</p>
+
+                <h6 class="fw-bold mt-4">Attachments</h6>
+                {% for attachment in ticket.attachments.all %}
+                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
+                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
+                        <span aria-hidden="true">📎</span>
+                        <span class="text-primary">{{ attachment.filename }}</span>
+                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
+                    </a>
+                {% empty %}
+                    <p class="text-muted mb-0">No attachments.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
 <!-- ================= MODALS SECTION ================= -->
 
 <!-- 1. CREATE TICKET MODAL -->
@@ -267,7 +317,7 @@
                 <h5 class="modal-title fw-bold">Create New Ticket</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="createTicketForm" onsubmit="createTicketDRF(event)">
+            <form id="createTicketForm" onsubmit="createTicketDRF(event)" enctype="multipart/form-data">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ticket Subject / Title</label>
@@ -297,6 +347,12 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Detailed Description</label>
                         <textarea id="ticketDescription" class="form-control" rows="4" placeholder="Explain the problem in detail..." required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Attachment (Optional)</label>
+                        <input type="file" id="ticketAttachment" class="form-control" accept=".jpg,.jpeg,.png,.pdf,.txt,.log">
+                        <div class="form-text">Allowed: JPG, PNG, PDF, TXT, LOG — Max size 5MB</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -433,7 +489,7 @@ function handleErrors(data) {
     alert(errorMessage);
 }
 
-// 1. Create Ticket
+// 1. Create Ticket (with optional attachment upload)
 async function createTicketDRF(event) {
     event.preventDefault();
     const payload = {
@@ -442,6 +498,8 @@ async function createTicketDRF(event) {
         category_id: parseInt(document.getElementById('ticketCategory').value),
         priority: document.getElementById('ticketPriority').value
     };
+    const fileInput = document.getElementById('ticketAttachment');
+    const file = fileInput.files[0];
 
     try {
         const response = await fetch("{% url 'tickets:create' %}", {
@@ -454,12 +512,32 @@ async function createTicketDRF(event) {
         });
 
         const data = await response.json();
-        if (response.ok) {
-            alert(data.message || "Ticket created successfully!");
-            location.reload();
-        } else {
+        if (!response.ok) {
             handleErrors(data);
+            return;
         }
+
+        // Agar file select ki gayi hai to ticket banne ke baad alag se upload karein
+        if (file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('ticket', data.ticket_id);
+
+            const uploadUrl = "{% url 'tickets:upload_attachment' ticket_id=0 %}".replace('0', data.ticket_id);
+            const uploadResponse = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                body: formData
+            });
+            const uploadData = await uploadResponse.json();
+
+            if (!uploadResponse.ok) {
+                alert("Ticket ban gayi, lekin attachment upload nahi ho saka: " + JSON.stringify(uploadData));
+            }
+        }
+
+        alert(data.message || "Ticket created successfully!");
+        location.reload();
     } catch (err) {
         console.error("DRF Error:", err);
         alert("Failed to submit request to server.");

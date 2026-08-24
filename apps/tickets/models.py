@@ -1,3 +1,6 @@
+import os
+from django.core.validators import FileExtensionValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from apps.accounts.models import CustomUser
 
@@ -97,3 +100,34 @@ class TicketHistory(models.Model):
 
     def __str__(self):
         return f"Ticket #{self.ticket_id}: {self.old_status} → {self.new_status}"
+
+
+# _______________file handling________________________
+
+def validate_file_size(value):
+    max_size_mb = 5
+    if value.size > max_size_mb * 1024 * 1024:
+        raise ValidationError(f"File size cannot exceed {max_size_mb}MB.")
+
+
+class TicketAttachment(models.Model):
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(
+        upload_to='ticket_attachments/%Y/%m/',
+        validators=[
+            FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'pdf', 'txt', 'log']),
+            validate_file_size,
+        ]
+    )
+    uploaded_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='uploaded_attachments')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"Attachment for Ticket #{self.ticket_id} - {self.filename}"
+
+    @property
+    def filename(self):
+        return os.path.basename(self.file.name)

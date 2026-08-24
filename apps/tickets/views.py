@@ -8,11 +8,25 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Ticket, TicketHistory, Category
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.decorators import parser_classes
+
+from .models import Ticket, TicketHistory, Category, TicketAttachment
 from apps.accounts.models import CustomUser
-from .serializers import (TicketSerializer, AssignTicketSerializer, ChangeStatusSerializer,CategorySerializer)
+from .serializers import (TicketSerializer, AssignTicketSerializer, ChangeStatusSerializer, CategorySerializer, TicketAttachmentSerializer)
 
 User = get_user_model()
+
+
+def _visible_tickets_for_user(user):
+    role = getattr(user, 'role', 'EMPLOYEE')
+    queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category').prefetch_related('attachments')
+
+    if role == 'ADMIN' or user.is_superuser:
+        return queryset
+    if role == 'SUPPORT':
+        return queryset.filter(assigned_to=user)
+    return queryset.filter(created_by=user)
 
 
 @login_required
@@ -49,12 +63,7 @@ def dashboard(request):
         return redirect('tickets:dashboard')
 
     # 1. Role-based QuerySet Filtering
-    if role == 'ADMIN' or user.is_superuser:
-        tickets = Ticket.objects.all().select_related('created_by', 'assigned_to', 'category')
-    elif role == 'SUPPORT':
-        tickets = Ticket.objects.filter(assigned_to=user).select_related('created_by', 'category')
-    else:  # EMPLOYEE
-        tickets = Ticket.objects.filter(created_by=user).select_related('assigned_to', 'category')
+    tickets = _visible_tickets_for_user(user)
     context = {
         'tickets': tickets,
         'user_role': role,
@@ -68,6 +77,12 @@ def dashboard(request):
         'status_choices': Ticket.Status.choices if hasattr(Ticket, 'Status') else [('OPEN', 'Open'), ('IN_PROGRESS', 'In Progress'), ('RESOLVED', 'Resolved'), ('CLOSED', 'Closed')],
     }
     return render(request, 'tickets/dashboard.html', context)
+
+
+@login_required
+def ticket_detail(request, ticket_id):
+    ticket = get_object_or_404(_visible_tickets_for_user(request.user), id=ticket_id)
+    return render(request, 'tickets/detail.html', {'ticket': ticket})
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -184,3 +199,29 @@ def assign_support(request, ticket_id):
             messages.success(request, "Support agent successfully assigned!")
             
     return redirect('tickets:dashboard')
+
+
+
+# task 4 file handling__________________
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated])
+def upload_attachment_api(request, ticket_id):
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    file_obj = request.FILES.get('file')
+
+    if not file_obj:
+        return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = TicketAttachmentSerializer(
+        data={'file': file_obj, 'ticket': ticket.id},
+        context={'request': request},
+    )
+    if serializer.is_valid():
+        serializer.save(ticket=ticket, uploaded_by=request.user)
+        return Response({
+            "message": "Attachment uploaded successfully!",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
