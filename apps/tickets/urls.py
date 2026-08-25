@@ -12,4 +12,5 @@ urlpatterns = [
     path('api/categories/create/', views.create_category_api, name='create_category'),
     path('tickets/<int:ticket_id>/assign/', views.assign_support, name='assign_support'),
     path('api/tickets/<int:ticket_id>/attachments/upload/', views.upload_attachment_api, name='upload_attachment'), 
+    path('server-health/', views.server_health_dashboard, name='server_health_dashboard'),
 ]

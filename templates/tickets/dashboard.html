@@ -400,14 +400,15 @@
                 <h5 class="modal-title fw-bold">Assign Ticket</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="assignTicketForm" onsubmit="assignTicketDRF(event)">
+            <form id="assignTicketForm" method="POST" action="{% url 'tickets:dashboard' %}" onsubmit="assignTicketDRF(event)">
+                {% csrf_token %}
                 <div class="modal-body">
-                    <input type="hidden" id="assignTicketId">
+                    <input type="hidden" id="assignTicketId" name="ticket_id">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Select Support Agent / Employee</label>
-                        <select id="assignAgentId" class="form-select" required>
+                        <select id="assignAgentId" name="agent_id" class="form-select" required>
                             <option value="">Choose User...</option>
-                            {% for agent in support_agents %}
+                            {% for agent in all_employees %}
                                 <option value="{{ agent.id }}">
                                     {{ agent.username }} ({{ agent.role|default:"EMPLOYEE" }})
                                 </option>
@@ -418,7 +419,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold">Confirm Assignment</button>
+                    <button type="submit" name="assign_agent" class="btn btn-primary fw-bold">Confirm Assignment</button>
                 </div>
             </form>
         </div>
@@ -579,35 +580,7 @@ function openAssignModal(ticketId) {
     modal.show();
 }
 
-async function assignTicketDRF(event) {
-    event.preventDefault();
-    const ticketId = document.getElementById('assignTicketId').value;
-    const agentId = parseInt(document.getElementById('assignAgentId').value);
 
-    const url = "{% url 'tickets:assign_support' ticket_id=0 %}".replace('0', ticketId);
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ user_id: agentId })
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-            alert(data.message || "Ticket assigned successfully!");
-            location.reload();
-        } else {
-            handleErrors(data);
-        }
-    } catch (err) {
-        console.error("DRF Assign Error:", err);
-        alert("Failed to process ticket assignment.");
-    }
-}
 
 // 4. Status Transition Modal & Submit
 function openStatusModal(ticketId, currentStatus) {
@@ -645,6 +618,46 @@ async function changeStatusDRF(event) {
     } catch (err) {
         console.error("DRF Status Error:", err);
         alert("Failed to transition status.");
+    }
+}
+async function assignTicketDRF(event) {
+    event.preventDefault();
+    
+    const ticketId = document.getElementById('assignTicketId').value;
+    const agentId = parseInt(document.getElementById('assignAgentId').value);
+
+    if (!ticketId || !agentId) {
+        alert("Please select a valid user to assign.");
+        return;
+    }
+
+    // Dynamic Django URL resolution (like other modals)
+    const url = "{% url 'tickets:assign' ticket_id=0 %}".replace('0', ticketId);
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ 
+                agent_id: agentId,
+                user_id: agentId 
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alert(data.message || "Ticket assigned successfully!");
+            location.reload();
+        } else {
+            handleErrors(data);
+        }
+    } catch (err) {
+        console.error("Assignment Error:", err);
+        alert("Failed to assign ticket.");
     }
 }
 </script>

@@ -131,3 +131,20 @@ class TicketAttachment(models.Model):
     @property
     def filename(self):
         return os.path.basename(self.file.name)
+
+
+class ServerHealthLog(models.Model):
+    cpu_usage = models.FloatField(help_text="CPU Usage Percentage")
+    memory_usage = models.FloatField(help_text="Memory/RAM Usage Percentage")
+    disk_usage = models.FloatField(help_text="Disk Space Usage Percentage")
+    system_uptime = models.CharField(max_length=100, default="N/A", help_text="Server Uptime")
+    active_connections = models.IntegerField(default=0, help_text="Active network/DB connections")
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Server Health Log"
+        verbose_name_plural = "Server Health Logs"
+
+    def __str__(self):
+        return f"Health Log ({self.timestamp.strftime('%Y-%m-%d %H:%M')}) - CPU: {self.cpu_usage}%"

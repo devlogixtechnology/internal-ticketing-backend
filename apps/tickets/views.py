@@ -17,11 +17,58 @@ from .serializers import (TicketSerializer, AssignTicketSerializer, ChangeStatus
 
 User = get_user_model()
 
+import json
+import time
+import psutil
+from datetime import timedelta
+from django.shortcuts import render
+from django.contrib.admin.views.decorators import staff_member_required
+from .models import ServerHealthLog
+
+@staff_member_required
+def server_health_dashboard(request):
+    cpu = psutil.cpu_percent(interval=0.3)
+    memory = psutil.virtual_memory().percent
+    disk = psutil.disk_usage('/').percent
+    
+    boot_time = psutil.boot_time()
+    uptime_seconds = int(time.time() - boot_time)
+    hours, remainder = divmod(uptime_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    uptime_str = f"{hours}h {minutes}m {seconds}s"
+    ServerHealthLog.objects.create(
+        cpu_usage=cpu,
+        memory_usage=memory,
+        disk_usage=disk,
+        system_uptime=uptime_str
+    )
+    latest_health = ServerHealthLog.objects.first()
+    recent_logs = ServerHealthLog.objects.all()[:100]
+    chart_logs = list(reversed(recent_logs[:30]))
+    
+    timestamps = [log.timestamp.strftime("%H:%M:%S") for log in chart_logs]
+    cpu_data = [round(log.cpu_usage, 1) for log in chart_logs]
+    ram_data = [round(log.memory_usage, 1) for log in chart_logs]
+    disk_data = [round(log.disk_usage, 1) for log in chart_logs]
+    avg_cpu = round(sum(cpu_data) / len(cpu_data), 1) if cpu_data else 0
+    max_cpu = max(cpu_data) if cpu_data else 0
+
+    context = {
+        'latest_health': latest_health,
+        'recent_logs': recent_logs,
+        'timestamps': json.dumps(timestamps),
+        'cpu_data': json.dumps(cpu_data),
+        'ram_data': json.dumps(ram_data),
+        'disk_data': json.dumps(disk_data),
+        'avg_cpu': avg_cpu,
+        'max_cpu': max_cpu,
+        'total_logs_count': ServerHealthLog.objects.count(),
+    }
+    return render(request, 'tickets/server_health.html', context)
 
 def _visible_tickets_for_user(user):
     role = getattr(user, 'role', 'EMPLOYEE')
     queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category').prefetch_related('attachments')
-
     if role == 'ADMIN' or user.is_superuser:
         return queryset
     if role == 'SUPPORT':
@@ -38,8 +85,7 @@ def dashboard(request):
         ticket_id = request.POST.get('ticket_id')
         if 'update_user_role' in request.POST and (role == 'ADMIN' or user.is_superuser):
             target_user_id = request.POST.get('target_user_id')
-            new_role = request.POST.get('new_role')  # 'SUPPORT' ya 'EMPLOYEE'
-            
+            new_role = request.POST.get('new_role')
             target_user = get_object_or_404(User, id=target_user_id)
             target_user.role = new_role
             target_user.save()
@@ -47,23 +93,52 @@ def dashboard(request):
             return redirect('tickets:dashboard')
         if ticket_id:
             ticket = get_object_or_404(Ticket, id=ticket_id)
-
             if 'assign_agent' in request.POST and (role == 'ADMIN' or user.is_superuser):
-                agent_id = request.POST.get('agent_id')
-                ticket.assigned_to = User.objects.filter(id=agent_id).first() if agent_id else None
-                ticket.save()
-                messages.success(request, f"Ticket #{ticket.id} assigned successfully!")
-
+                agent_id = request.POST.get('agent_id') or request.POST.get('support_agent_id')
+                if agent_id:
+                    assigned_user = User.objects.filter(id=agent_id).first()
+                    if assigned_user:
+                        old_status = ticket.status
+                        if getattr(assigned_user, 'role', None) != 'SUPPORT':
+                            assigned_user.role = 'SUPPORT'
+                            assigned_user.save()
+                        ticket.assigned_to = assigned_user
+                        ticket.status = 'OPEN' 
+                        ticket.save()
+                        TicketHistory.objects.create(
+                            ticket=ticket,
+                            changed_by=request.user,
+                            old_status=old_status,
+                            new_status=ticket.status,
+                            remarks=f"Assigned to {assigned_user.username}"
+                        )
+                        messages.success(request, f"Ticket #{ticket.id} assigned to {assigned_user.username} successfully!")
+                    else:
+                        messages.error(request, "Selected agent not found.")
+                else:
+                    messages.error(request, "Please select an agent.")
             elif 'update_status' in request.POST and (role in ['SUPPORT', 'ADMIN'] or user.is_superuser):
                 new_status = request.POST.get('status')
-                ticket.status = new_status
-                ticket.save()
-                messages.success(request, f"Ticket #{ticket.id} status updated to {new_status}!")
+                if new_status:
+                    old_status = ticket.status
+                    ticket.status = new_status
+                    ticket.save()
+                    TicketHistory.objects.create(
+                        ticket=ticket,
+                        changed_by=request.user,
+                        old_status=old_status,
+                        new_status=new_status,
+                        remarks=f"Status updated to {new_status}"
+                    )
+                    messages.success(request, f"Ticket #{ticket.id} status updated to {new_status}!")
+                else:
+                    messages.error(request, "Please select a valid status.")
 
         return redirect('tickets:dashboard')
 
-    # 1. Role-based QuerySet Filtering
+  
     tickets = _visible_tickets_for_user(user)
+    
     context = {
         'tickets': tickets,
         'user_role': role,
@@ -73,10 +148,12 @@ def dashboard(request):
         'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),
         'resolved_count': tickets.filter(status='RESOLVED').count(),
         'support_agents': User.objects.filter(role='SUPPORT'),
-        'all_employees': User.objects.all().exclude(is_superuser=True), # Admin view ke liye
+        'all_employees': User.objects.all().exclude(is_superuser=True),
         'status_choices': Ticket.Status.choices if hasattr(Ticket, 'Status') else [('OPEN', 'Open'), ('IN_PROGRESS', 'In Progress'), ('RESOLVED', 'Resolved'), ('CLOSED', 'Closed')],
     }
     return render(request, 'tickets/dashboard.html', context)
+
+
 
 
 @login_required
@@ -109,14 +186,20 @@ def assign_ticket_api(request, ticket_id):
     serializer = AssignTicketSerializer(data=request.data)
     
     if serializer.is_valid():
-        assigned_user = CustomUser.objects.get(id=serializer.validated_data['user_id'])
-        old_status = ticket.status
+        user_id = serializer.validated_data['user_id']
+        assigned_user = CustomUser.objects.filter(id=user_id).first()
         
+        if not assigned_user:
+            return Response({"error": "Selected user does not exist."}, status=status.HTTP_400_BAD_REQUEST)
+
+        old_status = ticket.status
         ticket.assigned_to = assigned_user
+        
         if hasattr(Ticket, 'Status'):
             ticket.status = Ticket.Status.OPEN
         else:
             ticket.status = 'OPEN'
+            
         ticket.save()
 
         # Log History
@@ -134,7 +217,6 @@ def assign_ticket_api(request, ticket_id):
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_status_api(request, ticket_id):
@@ -145,7 +227,6 @@ def change_status_api(request, ticket_id):
         new_status = serializer.validated_data['status']
         remarks = serializer.validated_data.get('remarks', '')
 
-        # Check state transition logic on model
         if hasattr(ticket, 'can_transition_to') and not ticket.can_transition_to(request.user, new_status):
             return Response({
                 "error": f"Role '{request.user.get_role_display()}' is not allowed to transition ticket from {ticket.status} to {new_status}"
@@ -154,8 +235,6 @@ def change_status_api(request, ticket_id):
         old_status = ticket.status
         ticket.status = new_status
         ticket.save()
-
-        # Log History Transition
         TicketHistory.objects.create(
             ticket=ticket,
             changed_by=request.user,
@@ -188,18 +267,37 @@ def create_category_api(request):
 
 
 
+@login_required
 def assign_support(request, ticket_id):
     if request.method == 'POST':
-        agent_id = request.POST.get('support_agent_id')
+        agent_id = request.POST.get('support_agent_id') or request.POST.get('agent_id')
         ticket = get_object_or_404(Ticket, id=ticket_id)
         
         if agent_id:
-            ticket.assigned_to_id = agent_id
-            ticket.save()
-            messages.success(request, "Support agent successfully assigned!")
+            assigned_user = User.objects.filter(id=agent_id).first()
+            if assigned_user:
+                old_status = ticket.status
+                ticket.assigned_to = assigned_user
+                if hasattr(Ticket, 'Status'):
+                    ticket.status = Ticket.Status.OPEN
+                else:
+                    ticket.status = 'OPEN'
+                    
+                ticket.save()
+                TicketHistory.objects.create(
+                    ticket=ticket,
+                    changed_by=request.user,
+                    old_status=old_status,
+                    new_status=ticket.status,
+                    remarks=f"Assigned to {assigned_user.username}"
+                )
+                messages.success(request, f"Ticket #{ticket.id} successfully assigned to {assigned_user.username}!")
+            else:
+                messages.error(request, "Selected support agent not found.")
+        else:
+            messages.error(request, "Please select a support agent.")
             
     return redirect('tickets:dashboard')
-
 
 
 # task 4 file handling__________________
@@ -225,3 +323,4 @@ def upload_attachment_api(request, ticket_id):
         }, status=status.HTTP_201_CREATED)
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
