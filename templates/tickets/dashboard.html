@@ -152,6 +152,101 @@
     </div>
     {% endif %}
 
+    <!-- ================= PENDING APPROVAL SECTION ================= -->
+    {% if pending_tickets %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">⏳ Pending Approval</h5>
+            <span class="badge bg-warning text-dark">{{ pending_tickets|length }} Waiting</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ticket ID</th>
+                            <th>Title</th>
+                            <th>Category</th>
+                            <th>Priority</th>
+                            {% if user_role == 'ADMIN' or user.is_superuser %}
+                                <th>Created By</th>
+                            {% endif %}
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in pending_tickets %}
+                        <tr>
+                            <td class="fw-bold">#{{ ticket.id }}</td>
+                            <td class="fw-semibold">{{ ticket.title }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ ticket.category.name }}</span></td>
+                            <td><span class="badge bg-secondary">{{ ticket.priority }}</span></td>
+                            {% if user_role == 'ADMIN' or user.is_superuser %}
+                            <td><span class="text-muted">{{ ticket.created_by.username }}</span></td>
+                            {% endif %}
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-dark me-1 fw-semibold"
+                                        data-bs-toggle="modal" data-bs-target="#ticketDetailModal{{ ticket.id }}">
+                                    View details
+                                </button>
+                                {% if user_role == 'ADMIN' or user.is_superuser %}
+                                <form method="POST" action="{% url 'tickets:dashboard' %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="ticket_id" value="{{ ticket.id }}">
+                                    <button type="submit" name="approve_ticket" class="btn btn-sm btn-success fw-bold me-1">Approve</button>
+                                    <button type="submit" name="reject_ticket" class="btn btn-sm btn-danger fw-bold">Reject</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ================= REJECTED TICKETS SECTION ================= -->
+    {% if rejected_tickets %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="fw-bold mb-0 text-danger">❌ Rejected Tickets</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ticket ID</th>
+                            <th>Title</th>
+                            <th>Category</th>
+                            {% if user_role != 'EMPLOYEE' %}<th>Created By</th>{% endif %}
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in rejected_tickets %}
+                        <tr class="table-danger">
+                            <td class="fw-bold">#{{ ticket.id }}</td>
+                            <td class="fw-semibold">{{ ticket.title }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ ticket.category.name }}</span></td>
+                            {% if user_role != 'EMPLOYEE' %}<td>{{ ticket.created_by.username }}</td>{% endif %}
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-dark fw-semibold"
+                                        data-bs-toggle="modal" data-bs-target="#ticketDetailModal{{ ticket.id }}">
+                                    View details
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ================= TICKETS DATA TABLE ================= -->
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white py-3 border-0">
@@ -161,10 +256,11 @@
                 {% elif user_role == 'SUPPORT' %}
                     My Active Assigned Tickets
                 {% else %}
-                    All Platform Tickets
+                    Approved Platform Tickets
                 {% endif %}
             </h5>
         </div>
+        
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -274,38 +370,6 @@
     </div>
 </div>
 
-{% for ticket in tickets %}
-<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header">
-                <div>
-                    <span class="text-muted small">Ticket #{{ ticket.id }}</span>
-                    <h5 class="modal-title fw-bold mb-0">{{ ticket.title }}</h5>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <h6 class="fw-bold">Description</h6>
-                <p class="text-muted" style="white-space: pre-wrap;">{{ ticket.description }}</p>
-
-                <h6 class="fw-bold mt-4">Attachments</h6>
-                {% for attachment in ticket.attachments.all %}
-                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
-                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
-                        <span aria-hidden="true">📎</span>
-                        <span class="text-primary">{{ attachment.filename }}</span>
-                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
-                    </a>
-                {% empty %}
-                    <p class="text-muted mb-0">No attachments.</p>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-</div>
-{% endfor %}
-
 <!-- ================= MODALS SECTION ================= -->
 
 <!-- 1. CREATE TICKET MODAL -->
@@ -407,13 +471,13 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Select Support Agent / Employee</label>
                         <select id="assignAgentId" name="agent_id" class="form-select" required>
-                            <option value="">Choose User...</option>
-                            {% for agent in all_employees %}
-                                <option value="{{ agent.id }}">
-                                    {{ agent.username }} ({{ agent.role|default:"EMPLOYEE" }})
-                                </option>
-                            {% endfor %}
-                        </select>
+    <option value="">Choose User...</option>
+    {% for agent in support_agents %}
+        <option value="{{ agent.id }}">
+            {{ agent.username }} ({{ agent.role|default:"EMPLOYEE" }})
+        </option>
+    {% endfor %}
+</select>
                         <div class="form-text">Assigning an Employee will auto-promote them to Support Agent.</div>
                     </div>
                 </div>
@@ -459,6 +523,116 @@
         </div>
     </div>
 </div>
+
+<!-- 5. TICKET DETAIL MODALS (Approved) -->
+{% for ticket in tickets %}
+<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <div>
+                    <span class="text-muted small">Ticket #{{ ticket.id }}</span>
+                    <h5 class="modal-title fw-bold mb-0">{{ ticket.title }}</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Description:</strong><br>{{ ticket.description }}</p>
+                <hr>
+                <div class="row">
+                    <div class="col-6"><strong>Category:</strong> {{ ticket.category.name }}</div>
+                    <div class="col-6"><strong>Priority:</strong> {{ ticket.priority }}</div>
+                    <div class="col-6 mt-2"><strong>Status:</strong> {{ ticket.get_status_display }}</div>
+                    <div class="col-6 mt-2"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
+                    <div class="col-6 mt-2"><strong>Assigned To:</strong> {{ ticket.assigned_to.username|default:"Unassigned" }}</div>
+                    <div class="col-6 mt-2"><strong>Created At:</strong> {{ ticket.created_at|date:"d M Y, h:i A" }}</div>
+                </div>
+                <hr>
+                <strong>Attachments:</strong><br>
+                {% for attachment in ticket.attachments.all %}
+                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
+                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
+                        <span aria-hidden="true">📎</span>
+                        <span class="text-primary">{{ attachment.filename }}</span>
+                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
+                    </a>
+                {% empty %}
+                    <p class="text-muted mb-0">No attachments.</p>
+                {% endfor %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- 6. TICKET DETAIL MODALS (Pending) -->
+{% for ticket in pending_tickets %}
+<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Ticket #{{ ticket.id }} — {{ ticket.title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Description:</strong><br>{{ ticket.description }}</p>
+                <hr>
+                <div class="row">
+                    <div class="col-6"><strong>Category:</strong> {{ ticket.category.name }}</div>
+                    <div class="col-6"><strong>Priority:</strong> {{ ticket.priority }}</div>
+                    <div class="col-6 mt-2"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
+                    <div class="col-6 mt-2"><strong>Created At:</strong> {{ ticket.created_at|date:"d M Y, h:i A" }}</div>
+                </div>
+                <hr>
+                <strong>Attachments:</strong><br>
+                {% for attachment in ticket.attachments.all %}
+                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
+                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
+                        <span aria-hidden="true">📎</span>
+                        <span class="text-primary">{{ attachment.filename }}</span>
+                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
+                    </a>
+                {% empty %}
+                    <p class="text-muted mb-0">No attachments.</p>
+                {% endfor %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- 7. TICKET DETAIL MODALS (Rejected) -->
+{% for ticket in rejected_tickets %}
+<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Ticket #{{ ticket.id }} — {{ ticket.title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Description:</strong><br>{{ ticket.description }}</p>
+                <hr>
+                <div class="row">
+                    <div class="col-6"><strong>Category:</strong> {{ ticket.category.name }}</div>
+                    <div class="col-6"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
+                    <div class="col-6 mt-2"><strong>Created At:</strong> {{ ticket.created_at|date:"d M Y, h:i A" }}</div>
+                </div>
+                <div class="alert alert-danger mt-3 mb-0">This ticket was rejected by Admin.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <!-- ================= JAVASCRIPT FETCH HANDLERS ================= -->
 <script>
@@ -580,7 +754,45 @@ function openAssignModal(ticketId) {
     modal.show();
 }
 
+async function assignTicketDRF(event) {
+    event.preventDefault();
 
+    const ticketId = document.getElementById('assignTicketId').value;
+    const agentId = parseInt(document.getElementById('assignAgentId').value);
+
+    if (!ticketId || !agentId) {
+        alert("Please select a valid user to assign.");
+        return;
+    }
+
+    const url = "{% url 'tickets:assign' ticket_id=0 %}".replace('0', ticketId);
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ 
+                agent_id: agentId,
+                user_id: agentId 
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            alert(data.message || "Ticket assigned successfully!");
+            location.reload();
+        } else {
+            handleErrors(data);
+        }
+    } catch (err) {
+        console.error("Assignment Error:", err);
+        alert("Failed to assign ticket.");
+    }
+}
 
 // 4. Status Transition Modal & Submit
 function openStatusModal(ticketId, currentStatus) {
@@ -618,46 +830,6 @@ async function changeStatusDRF(event) {
     } catch (err) {
         console.error("DRF Status Error:", err);
         alert("Failed to transition status.");
-    }
-}
-async function assignTicketDRF(event) {
-    event.preventDefault();
-    
-    const ticketId = document.getElementById('assignTicketId').value;
-    const agentId = parseInt(document.getElementById('assignAgentId').value);
-
-    if (!ticketId || !agentId) {
-        alert("Please select a valid user to assign.");
-        return;
-    }
-
-    // Dynamic Django URL resolution (like other modals)
-    const url = "{% url 'tickets:assign' ticket_id=0 %}".replace('0', ticketId);
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ 
-                agent_id: agentId,
-                user_id: agentId 
-            })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            alert(data.message || "Ticket assigned successfully!");
-            location.reload();
-        } else {
-            handleErrors(data);
-        }
-    } catch (err) {
-        console.error("Assignment Error:", err);
-        alert("Failed to assign ticket.");
     }
 }
 </script>

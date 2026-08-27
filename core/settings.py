@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # Local apps
     'apps.accounts',
     'apps.tickets',
+    'apps.notifications',
 ]
 
 # Custom User Model

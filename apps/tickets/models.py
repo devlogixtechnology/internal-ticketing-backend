@@ -30,11 +30,19 @@ class Ticket(models.Model):
         RESOLVED = 'RESOLVED', 'Resolved'
         CLOSED = 'CLOSED', 'Closed'
 
+    class ApprovalStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        APPROVED = 'APPROVED', 'Approved'
+        REJECTED = 'REJECTED', 'Rejected'
+
     title = models.CharField(max_length=255)
     description = models.TextField()
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='tickets')
     priority = models.CharField(max_length=10, choices=Priority.choices, default=Priority.MEDIUM)
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.OPEN)
+    approval_status = models.CharField(
+        max_length=10, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
+    )
 
     created_by = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, related_name='created_tickets'
