@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.tickets',
     'apps.notifications',
+    'apps.clients',
 ]
 
 # Custom User Model

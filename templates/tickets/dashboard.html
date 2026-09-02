@@ -90,9 +90,23 @@
 
     <!-- ================= ADMIN ONLY: TEAM ROLE ALLOCATION SECTION ================= -->
     {% if user_role == 'ADMIN' or user.is_superuser %}
+
+    <!-- ── Tenant & Whitelist Management Quick Link ── -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-            <h5 class="fw-bold mb-0 text-dark">👥 Support Team & Employee Role Allocation</h5>
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">🏢 Tenant &amp; Whitelist Management</h5>
+                <small class="text-muted">Manage client tenants, contacts, and IP/domain whitelists</small>
+            </div>
+            <a href="{% url 'clients:list' %}" class="btn btn-outline-primary btn-sm fw-semibold" id="btn-manage-clients">
+                Open Dashboard →
+            </a>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">👥 Support Team &amp; Employee Role Allocation</h5>
             <span class="badge bg-light text-dark border">Admin Control</span>
         </div>
         <div class="card-body p-0">
