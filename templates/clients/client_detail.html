@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ client.name }} — Client Detail{% endblock %}
+
+{% block content %}
+<style>
+  /* ── Layout ──────────────────────────────────────────── */
+  .detail-header {
+    background: linear-gradient(135deg, var(--devlogix-navy) 0%, #1e3a5f 100%);
+    border-radius: 14px;
+    color: #fff;
+    padding: 1.6rem 2rem;
+    margin-bottom: 1.5rem;
+  }
+  .detail-header .client-code {
+    font-family: monospace;
+    background: rgba(255,255,255,.15);
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-size: .85rem;
+  }
+  /* ── Section cards ───────────────────────────────────── */
+  .section-card { border: none; border-radius: 14px; margin-bottom: 1.5rem; }
+  .section-card .card-header {
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: 14px 14px 0 0 !important;
+    padding: .9rem 1.4rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-card .card-header:hover { background: #f8f9fa; }
+  /* ── Tables ──────────────────────────────────────────── */
+  .detail-table td, .detail-table th { vertical-align: middle; font-size: .88rem; }
+  /* ── Badges ──────────────────────────────────────────── */
+  .badge-active   { background:#d1fae5; color:#065f46; border-radius:20px; padding:3px 11px; font-size:.78rem; }
+  .badge-inactive { background:#fee2e2; color:#991b1b; border-radius:20px; padding:3px 11px; font-size:.78rem; }
+  /* ── Inline forms ────────────────────────────────────── */
+  .inline-form-panel {
+    background: #f8f9fa;
+    border-top: 1px solid #e5e7eb;
+    padding: 1.2rem 1.4rem;
+  }
+  .field-error { font-size:.78rem; color:#dc3545; margin-top:.2rem; }
+  .form-label  { font-weight:600; font-size:.82rem; }
+  .action-btn  { font-size:.78rem; padding:3px 10px; border-radius:7px; }
+  /* ── Toggle chevron ──────────────────────────────────── */
+  .chevron { transition: transform .2s; display: inline-block; }
+  .collapsed .chevron { transform: rotate(-90deg); }
+</style>
+
+<div class="container-fluid py-4">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'clients:list' %}" class="text-decoration-none">Tenant Management</a>
+      </li>
+      <li class="breadcrumb-item active">{{ client.name }}</li>
+    </ol>
+  </nav>
+
+  <!-- ── Client Header Panel ─────────────────────────────── -->
+  <div class="detail-header d-flex flex-wrap gap-3 justify-content-between align-items-center">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <h2 class="fw-bold mb-0">{{ client.name }}</h2>
+        <span class="client-code">{{ client.code }}</span>
+        {% if client.is_active %}
+          <span class="badge bg-success ms-1">Active</span>
+        {% else %}
+          <span class="badge bg-danger ms-1">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="mb-0 opacity-75 small">
+        Created: {{ client.created_at|date:"d M Y, H:i" }} &nbsp;|&nbsp;
+        {{ client.tickets.count }} Ticket{{ client.tickets.count|pluralize }} &nbsp;|&nbsp;
+        {{ contacts.count }} Contact{{ contacts.count|pluralize }} &nbsp;|&nbsp;
+        {{ domains.count }} Domain{{ domains.count|pluralize }} &nbsp;|&nbsp;
+        {{ ips.count }} IP/CIDR entr{{ ips.count|pluralize:"y,ies" }}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <!-- BE2 Linkage: Direct button to view this client's tickets -->
+      <a href="{% url 'tickets:dashboard' %}?client={{ client.pk }}" class="btn btn-info text-white fw-semibold" id="btn-view-client-tickets">
+        🎟️ View Tickets ({{ client.tickets.count }})
+      </a>
+      <a href="{% url 'clients:edit' client.pk %}" class="btn btn-light fw-semibold" id="btn-edit-client">
+        ✏️ Edit Client
+      </a>
+      <button type="button" class="btn btn-danger fw-semibold"
+              data-bs-toggle="modal" data-bs-target="#deleteClientModal" id="btn-delete-client">
+        🗑️ Delete
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- SECTION 1 — CONTACTS                                 -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="card shadow-sm section-card" id="card-contacts">
+
+    <!-- Header / Toggle -->
+    <div class="card-header d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse" data-bs-target="#collapseContacts"
+         aria-expanded="{% if open_section == 'contacts' or contacts %}true{% else %}false{% endif %}"
+         id="header-contacts">
+      <h6 class="fw-bold mb-0">👤 Contacts ({{ contacts.count }})</h6>
+      <span class="chevron text-muted">▼</span>
+    </div>
+
+    <div class="collapse {% if open_section == 'contacts' or contacts %}show{% endif %}"
+         id="collapseContacts">
+
+      <!-- Table -->
+      {% if contacts %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 detail-table" id="contacts-table">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Designation</th>
+              <th class="text-end pe-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contact in contacts %}
+            <tr id="contact-row-{{ contact.pk }}">
+              <td class="ps-3 fw-semibold">{{ contact.name }}</td>
+              <td><a href="mailto:{{ contact.email }}" class="text-decoration-none">{{ contact.email }}</a></td>
+              <td class="text-muted">{{ contact.phone|default:"—" }}</td>
+              <td class="text-muted">{{ contact.designation|default:"—" }}</td>
+              <td class="text-end pe-3">
+                <form method="post" action="{% url 'clients:contact_delete' client.pk contact.pk %}"
+                      class="d-inline" onsubmit="return confirm('Remove this contact?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-danger action-btn"
+                          id="delete-contact-{{ contact.pk }}">🗑️ Remove</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-center py-3 mb-0 small">No contacts yet.</p>
+      {% endif %}
+
+      <!-- Inline Add Contact Form -->
+      <div class="inline-form-panel">
+        <p class="fw-semibold small mb-2 text-uppercase" style="font-size:.72rem;letter-spacing:.08em;color:var(--devlogix-gray);">
+          ➕ Add Contact
+        </p>
+        <form method="post" action="{% url 'clients:contact_add' client.pk %}" novalidate id="contact-add-form">
+          {% csrf_token %}
+          <div class="row g-2">
+            <div class="col-md-3">
+              <label class="form-label">Name *</label>
+              {{ contact_form.name }}
+              {% for e in contact_form.name.errors %}<div class="field-error">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Email *</label>
+              {{ contact_form.email }}
+              {% for e in contact_form.email.errors %}<div class="field-error">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Phone</label>
+              {{ contact_form.phone }}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Designation</label>
+              {{ contact_form.designation }}
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button type="submit" class="btn btn-devlogix w-100" id="btn-add-contact">Add</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+    </div><!-- /collapseContacts -->
+  </div><!-- /contacts card -->
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- SECTION 2 — WHITELISTED DOMAINS                     -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="card shadow-sm section-card" id="card-domains">
+
+    <div class="card-header d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse" data-bs-target="#collapseDomains"
+         aria-expanded="{% if open_section == 'domains' or domains %}true{% else %}false{% endif %}"
+         id="header-domains">
+      <h6 class="fw-bold mb-0">🌐 Whitelisted Domains ({{ domains.count }})</h6>
+      <span class="chevron text-muted">▼</span>
+    </div>
+
+    <div class="collapse {% if open_section == 'domains' or domains %}show{% endif %}"
+         id="collapseDomains">
+
+      {% if domains %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 detail-table" id="domains-table">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">Domain Name</th>
+              <th>Status</th>
+              <th class="text-end pe-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for domain in domains %}
+            <tr id="domain-row-{{ domain.pk }}">
+              <td class="ps-3 fw-semibold">
+                <code>{{ domain.domain_name }}</code>
+              </td>
+              <td>
+                {% if domain.is_active %}
+                  <span class="badge-active">Active</span>
+                {% else %}
+                  <span class="badge-inactive">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-end pe-3">
+                <div class="d-flex gap-1 justify-content-end">
+                  <!-- Toggle Active -->
+                  <form method="post" action="{% url 'clients:domain_toggle' client.pk domain.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="btn action-btn {% if domain.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                            id="toggle-domain-{{ domain.pk }}"
+                            title="{% if domain.is_active %}Deactivate{% else %}Activate{% endif %}">
+                      {% if domain.is_active %}⏸ Deactivate{% else %}▶ Activate{% endif %}
+                    </button>
+                  </form>
+                  <!-- Delete -->
+                  <form method="post" action="{% url 'clients:domain_delete' client.pk domain.pk %}"
+                        class="d-inline" onsubmit="return confirm('Remove domain {{ domain.domain_name }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger action-btn"
+                            id="delete-domain-{{ domain.pk }}">🗑️</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-center py-3 mb-0 small">No whitelisted domains yet.</p>
+      {% endif %}
+
+      <!-- Inline Add Domain Form -->
+      <div class="inline-form-panel">
+        <p class="fw-semibold small mb-2 text-uppercase" style="font-size:.72rem;letter-spacing:.08em;color:var(--devlogix-gray);">
+          ➕ Add Domain
+        </p>
+        <form method="post" action="{% url 'clients:domain_add' client.pk %}" novalidate id="domain-add-form">
+          {% csrf_token %}
+          <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label">Domain Name *</label>
+              {{ domain_form.domain_name }}
+              {% for e in domain_form.domain_name.errors %}<div class="field-error">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-md-3 d-flex align-items-center gap-2 pt-3">
+              {{ domain_form.is_active }}
+              <label class="form-label mb-0" for="{{ domain_form.is_active.id_for_label }}">Active</label>
+            </div>
+            <div class="col-md-4">
+              <button type="submit" class="btn btn-devlogix w-100" id="btn-add-domain">Whitelist Domain</button>
+            </div>
+          </div>
+          {% if domain_form.non_field_errors %}
+          <div class="alert alert-danger mt-2 py-2 small">
+            {% for e in domain_form.non_field_errors %}{{ e }}{% endfor %}
+          </div>
+          {% endif %}
+        </form>
+      </div>
+
+    </div><!-- /collapseDomains -->
+  </div><!-- /domains card -->
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- SECTION 3 — WHITELISTED IPs / CIDRs                 -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="card shadow-sm section-card" id="card-ips">
+
+    <div class="card-header d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse" data-bs-target="#collapseIPs"
+         aria-expanded="{% if open_section == 'ips' or ips %}true{% else %}false{% endif %}"
+         id="header-ips">
+      <h6 class="fw-bold mb-0">🛡️ Whitelisted IPs / CIDRs ({{ ips.count }})</h6>
+      <span class="chevron text-muted">▼</span>
+    </div>
+
+    <div class="collapse {% if open_section == 'ips' or ips %}show{% endif %}"
+         id="collapseIPs">
+
+      {% if ips %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 detail-table" id="ips-table">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">IP / CIDR</th>
+              <th>Description / Label</th>
+              <th class="text-end pe-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ip in ips %}
+            <tr id="ip-row-{{ ip.pk }}">
+              <td class="ps-3"><code class="fw-semibold">{{ ip.ip_or_cidr }}</code></td>
+              <td class="text-muted">{{ ip.description|default:"—" }}</td>
+              <td class="text-end pe-3">
+                <form method="post" action="{% url 'clients:ip_delete' client.pk ip.pk %}"
+                      class="d-inline" onsubmit="return confirm('Remove {{ ip.ip_or_cidr }} from whitelist?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-danger action-btn"
+                          id="delete-ip-{{ ip.pk }}">🗑️ Remove</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-center py-3 mb-0 small">No whitelisted IPs yet.</p>
+      {% endif %}
+
+      <!-- Inline Add IP Form -->
+      <div class="inline-form-panel">
+        <p class="fw-semibold small mb-2 text-uppercase" style="font-size:.72rem;letter-spacing:.08em;color:var(--devlogix-gray);">
+          ➕ Add IP / CIDR
+        </p>
+        <form method="post" action="{% url 'clients:ip_add' client.pk %}" novalidate id="ip-add-form">
+          {% csrf_token %}
+          <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label">IP Address or CIDR Range *</label>
+              {{ ip_form.ip_or_cidr }}
+              {% for e in ip_form.ip_or_cidr.errors %}
+                <div class="field-error">{{ e }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Label / Description</label>
+              {{ ip_form.description }}
+            </div>
+            <div class="col-md-3">
+              <button type="submit" class="btn btn-devlogix w-100" id="btn-add-ip">Whitelist IP</button>
+            </div>
+          </div>
+          <!-- Show model-level validation error (CIDR) clearly -->
+          {% if ip_form.ip_or_cidr.errors %}
+          <div class="alert alert-danger mt-2 py-2 small d-flex align-items-center gap-2">
+            ⚠️
+            <div>
+              <strong>Invalid IP / CIDR format.</strong>
+              Use plain addresses (e.g. <code>192.168.1.1</code>) or CIDR notation (e.g. <code>10.0.0.0/24</code>).
+            </div>
+          </div>
+          {% endif %}
+        </form>
+      </div>
+
+    </div><!-- /collapseIPs -->
+  </div><!-- /ips card -->
+
+</div><!-- /container-fluid -->
+
+
+<!-- ── Delete Client Confirm Modal ────────────────────────────────────────── -->
+<div class="modal fade" id="deleteClientModal" tabindex="-1"
+     aria-labelledby="deleteClientModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="deleteClientModalLabel">⚠️ Delete Client</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">
+          Permanently delete <strong>{{ client.name }}</strong>?<br>
+          <span class="text-danger small">
+            All contacts ({{ contacts.count }}), domains ({{ domains.count }}),
+            and IPs ({{ ips.count }}) will be removed.
+          </span>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="{% url 'clients:delete' client.pk %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger" id="confirm-delete-client">Yes, Delete Client</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Auto-collapse chevron icon when Bootstrap collapse state changes
+document.querySelectorAll('.collapse').forEach(function(el) {
+  el.addEventListener('show.bs.collapse', function() {
+    var header = document.querySelector('[data-bs-target="#' + el.id + '"]');
+    if (header) header.classList.remove('collapsed');
+  });
+  el.addEventListener('hide.bs.collapse', function() {
+    var header = document.querySelector('[data-bs-target="#' + el.id + '"]');
+    if (header) header.classList.add('collapsed');
+  });
+});
+
+// Auto-scroll to the open_section on page load if there were form errors
+{% if open_section %}
+(function() {
+  var target = document.getElementById('card-{{ open_section }}');
+  if (target) setTimeout(function(){ target.scrollIntoView({behavior:'smooth', block:'start'}); }, 250);
+})();
+{% endif %}
+</script>
+
+{% endblock %}
