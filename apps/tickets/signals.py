@@ -4,6 +4,8 @@ from django.dispatch import receiver
 from .models import Ticket, TicketHistory
 from apps.notifications.models import Notification
 from apps.accounts.models import CustomUser
+from .models import Ticket
+from .tasks import send_ticket_assigned_email
 
 
 @receiver(post_save, sender=Ticket)
@@ -44,3 +46,10 @@ def notify_on_status_change(sender, instance, created, **kwargs):
                 message=f"Status changed from {instance.old_status} to {instance.new_status}."
                         + (f" Remarks: {instance.remarks}" if instance.remarks else "")
             )
+
+
+@receiver(post_save, sender=Ticket)
+def trigger_ticket_tasks(sender, instance, created, **kwargs):
+    if not created and instance.assigned_to:
+        # Save ke baad background task run karein
+        send_ticket_assigned_email.delay(instance.id, instance.assigned_to.email)

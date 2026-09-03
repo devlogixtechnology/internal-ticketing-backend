@@ -21,11 +21,6 @@ class CustomUser(AbstractUser):
         SUPPORT = 'SUPPORT', 'Support'
         ADMIN = 'ADMIN', 'Admin'
 
-    role = models.CharField(
-        max_length=10,
-        choices=Role.choices,
-        default=Role.EMPLOYEE
-    )
     department = models.ForeignKey(
         Department,
         on_delete=models.SET_NULL,
@@ -34,6 +29,22 @@ class CustomUser(AbstractUser):
         related_name='users'
     )
     phone_number = models.CharField(max_length=20, blank=True, null=True)
+    
+    # FIX: choices=Role.choices aur default set kar diya gaya hai
+    role = models.CharField(
+        max_length=20, 
+        choices=Role.choices, 
+        default=Role.SUPPORT
+    )
+    
+    # Task ke requirement ke mutabiq Client FK yahan majood hai
+    client = models.ForeignKey(
+        'clients.Client',  # App name 'clients' aur model 'Client'
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='users'
+    )
 
     def save(self, *args, **kwargs):
         if self.is_superuser:

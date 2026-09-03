@@ -75,12 +75,17 @@
       </div>
       <p class="mb-0 opacity-75 small">
         Created: {{ client.created_at|date:"d M Y, H:i" }} &nbsp;|&nbsp;
+        {{ client.tickets.count }} Ticket{{ client.tickets.count|pluralize }} &nbsp;|&nbsp;
         {{ contacts.count }} Contact{{ contacts.count|pluralize }} &nbsp;|&nbsp;
         {{ domains.count }} Domain{{ domains.count|pluralize }} &nbsp;|&nbsp;
         {{ ips.count }} IP/CIDR entr{{ ips.count|pluralize:"y,ies" }}
       </p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+      <!-- BE2 Linkage: Direct button to view this client's tickets -->
+      <a href="{% url 'tickets:dashboard' %}?client={{ client.pk }}" class="btn btn-info text-white fw-semibold" id="btn-view-client-tickets">
+        🎟️ View Tickets ({{ client.tickets.count }})
+      </a>
       <a href="{% url 'clients:edit' client.pk %}" class="btn btn-light fw-semibold" id="btn-edit-client">
         ✏️ Edit Client
       </a>
@@ -93,7 +98,7 @@
 
 
   <!-- ════════════════════════════════════════════════════ -->
-  <!-- SECTION 1 — CONTACTS                               -->
+  <!-- SECTION 1 — CONTACTS                                 -->
   <!-- ════════════════════════════════════════════════════ -->
   <div class="card shadow-sm section-card" id="card-contacts">
 

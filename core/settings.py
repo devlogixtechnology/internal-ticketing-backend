@@ -10,7 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+
+import environ
+import os
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env(
+    DEBUG=(bool, False)
+)
+
+# .env file load karein
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env('DEBUG')
+DATABASES = {
+    'default': env.db('DATABASE_URL')
+}
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -146,4 +165,27 @@ MAILERS = {
     'default': {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
+}
+# settings.py
+
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+
+# Redis connection parameters mein protocol version 2 force karein
+CELERY_REDIS_BACKEND_SETTINGS = {
+    'protocol_version': 2
+}
+
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'protocol_version': 2,
+    'redis_connect_kwargs': {
+        'protocol': 2
+    }
+}
+
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+    'protocol_version': 2,
+    'redis_connect_kwargs': {
+        'protocol': 2
+    }
 }

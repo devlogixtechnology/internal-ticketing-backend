@@ -1,31 +1,258 @@
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.contrib.auth import get_user_model
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.decorators import parser_classes
-from apps.notifications.models import Notification
-
-from .models import Ticket, TicketHistory, Category, TicketAttachment
-from apps.accounts.models import CustomUser
-from .serializers import (TicketSerializer, AssignTicketSerializer, ChangeStatusSerializer, CategorySerializer, TicketAttachmentSerializer)
-
-User = get_user_model()
-
 import json
 import time
 import psutil
 from datetime import timedelta
-from django.shortcuts import render
-from django.contrib.admin.views.decorators import staff_member_required
-from .models import ServerHealthLog
 
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.admin.views.decorators import staff_member_required
+
+from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status, generics, viewsets
+from rest_framework.parsers import MultiPartParser, FormParser
+
+from apps.notifications.models import Notification
+from apps.accounts.models import CustomUser
+from .models import Ticket, TicketHistory, Category, TicketAttachment, ServerHealthLog
+from .serializers import (
+    TicketSerializer, AssignTicketSerializer, ChangeStatusSerializer, 
+    CategorySerializer, TicketAttachmentSerializer
+)
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from .models import Ticket
+from .serializers import TicketSerializer
+
+User = get_user_model()
+
+
+# ---------------------------------------------------------
+# HELPER: DRF & Template Level Queryset Scoping
+# ---------------------------------------------------------
+def _visible_tickets_for_user(user):
+    """
+    Client-scoped Querysets:
+    - ADMIN/Superuser: All Tickets
+    - SUPPORT: Only assigned tickets
+    - CLIENT/EMPLOYEE: Only their own tickets
+    """
+    role = getattr(user, 'role', 'EMPLOYEE')
+    queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category').prefetch_related('attachments')
+    
+    if role == 'ADMIN' or user.is_superuser:
+        return queryset
+    if role == 'SUPPORT':
+        return queryset.filter(assigned_to=user)
+    
+    # Client scoping (User sees only their own tickets)
+    return queryset.filter(created_by=user)
+
+
+# ---------------------------------------------------------
+# DRF VIEWSET (NEW: Client Scoped API)
+# ---------------------------------------------------------
+class TicketViewSet(viewsets.ModelViewSet):
+    """
+    DRF ViewSet for Ticket Management with scoping & zero data leak.
+    """
+    serializer_class = TicketSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return _visible_tickets_for_user(self.request.user)
+
+    def perform_create(self, serializer):
+        # Assign creator automatically
+        serializer.save(created_by=self.request.user)
+
+
+# ---------------------------------------------------------
+# DRF API VIEWS
+# ---------------------------------------------------------
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def ticket_list_create_api(request):
+    """
+    DRF API endpoint to list client-scoped tickets or create a new ticket.
+    """
+    if request.method == 'GET':
+        tickets = _visible_tickets_for_user(request.user)
+        serializer = TicketSerializer(tickets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        serializer = TicketSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            ticket = serializer.save(created_by=request.user)
+            return Response({
+                "message": "Ticket created successfully",
+                "ticket_id": ticket.id,
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_ticket_api(request):
+    serializer = TicketSerializer(data=request.data, context={'request': request})
+    if serializer.is_valid():
+        ticket = serializer.save(created_by=request.user)
+        return Response({
+            "message": "Ticket created successfully",
+            "ticket_id": ticket.id,
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def assign_ticket_api(request, ticket_id):
+    if not (request.user.role == 'ADMIN' or request.user.is_superuser):
+        return Response({"error": "Only Admins can assign tickets"}, status=status.HTTP_403_FORBIDDEN)
+
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    serializer = AssignTicketSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        user_id = serializer.validated_data['user_id']
+        assigned_user = CustomUser.objects.filter(id=user_id).first()
+        
+        if not assigned_user:
+            return Response({"error": "Selected user does not exist."}, status=status.HTTP_400_BAD_REQUEST)
+
+        old_status = ticket.status
+        ticket.assigned_to = assigned_user
+        ticket.status = getattr(Ticket.Status, 'OPEN', 'OPEN') if hasattr(Ticket, 'Status') else 'OPEN'
+        ticket.save()
+
+        TicketHistory.objects.create(
+            ticket=ticket,
+            changed_by=request.user,
+            old_status=old_status,
+            new_status=ticket.status,
+            remarks=f"Assigned to {assigned_user.username}"
+        )
+
+        return Response({
+            "message": f"Ticket #{ticket.id} assigned to {assigned_user.username}"
+        }, status=status.HTTP_200_OK)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+def assign_ticket_view(request):
+    if request.method == 'POST':
+        ticket_id = request.POST.get('ticket_id')
+        assigned_to_id = request.POST.get('assigned_to')
+        
+        ticket = get_object_or_404(Ticket, id=ticket_id)
+        # Update logic ...
+        ticket.assigned_to_id = assigned_to_id
+        ticket.save()
+
+        # Background Celery task call karna (.delay method se)
+        if ticket.assigned_to and ticket.assigned_to.email:
+            send_ticket_assigned_email.delay(ticket.id, ticket.assigned_to.email)
+
+        return redirect('ticket_list')
+
+def update_status_view(request):
+    if request.method == 'POST':
+        ticket_id = request.POST.get('ticket_id')
+        new_status = request.POST.get('status')
+
+        ticket = get_object_or_404(Ticket, id=ticket_id)
+        ticket.status = new_status
+        ticket.save()
+
+        # Call Celery task in background
+        send_status_update_email.delay(ticket.id, new_status)
+
+        return redirect('ticket_list')
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_status_api(request, ticket_id):
+    # Only access tickets allowed to this user
+    ticket = get_object_or_404(_visible_tickets_for_user(request.user), id=ticket_id)
+    serializer = ChangeStatusSerializer(data=request.data)
+
+    if serializer.is_valid():
+        new_status = serializer.validated_data['status']
+        remarks = serializer.validated_data.get('remarks', '')
+
+        if hasattr(ticket, 'can_transition_to') and not ticket.can_transition_to(request.user, new_status):
+            return Response({
+                "error": f"Role '{request.user.get_role_display()}' is not allowed to transition ticket from {ticket.status} to {new_status}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        old_status = ticket.status
+        ticket.status = new_status
+        ticket.save()
+        
+        TicketHistory.objects.create(
+            ticket=ticket,
+            changed_by=request.user,
+            old_status=old_status,
+            new_status=new_status,
+            remarks=remarks
+        )
+
+        return Response({
+            "message": f"Ticket #{ticket.id} status updated to {new_status}"
+        }, status=status.HTTP_200_OK)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_category_api(request):
+    if not (request.user.role == 'ADMIN' or request.user.is_superuser):
+        return Response({"error": "Only Admins can add new categories."}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = CategorySerializer(data=request.data)
+    if serializer.is_valid():
+        category = serializer.save()
+        return Response({
+            "message": f"Category '{category.name}' created successfully!",
+            "category": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated])
+def upload_attachment_api(request, ticket_id):
+    ticket = get_object_or_404(_visible_tickets_for_user(request.user), id=ticket_id)
+    file_obj = request.FILES.get('file')
+
+    if not file_obj:
+        return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer = TicketAttachmentSerializer(
+        data={'file': file_obj, 'ticket': ticket.id},
+        context={'request': request},
+    )
+    if serializer.is_valid():
+        serializer.save(ticket=ticket, uploaded_by=request.user)
+        return Response({
+            "message": "Attachment uploaded successfully!",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------
+# TEMPLATE VIEWS
+# ---------------------------------------------------------
 @staff_member_required
 def server_health_dashboard(request):
     cpu = psutil.cpu_percent(interval=0.3)
@@ -37,6 +264,7 @@ def server_health_dashboard(request):
     hours, remainder = divmod(uptime_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     uptime_str = f"{hours}h {minutes}m {seconds}s"
+    
     ServerHealthLog.objects.create(
         cpu_usage=cpu,
         memory_usage=memory,
@@ -67,15 +295,9 @@ def server_health_dashboard(request):
     }
     return render(request, 'tickets/server_health.html', context)
 
-def _visible_tickets_for_user(user):
-    role = getattr(user, 'role', 'EMPLOYEE')
-    queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category').prefetch_related('attachments')
-    if role == 'ADMIN' or user.is_superuser:
-        return queryset
-    if role == 'SUPPORT':
-        return queryset.filter(assigned_to=user)
-    return queryset.filter(created_by=user)
+from .tasks import send_ticket_assigned_email, send_status_update_email  # Celery Tasks
 
+User = get_user_model()
 
 
 @login_required
@@ -83,9 +305,13 @@ def dashboard(request):
     user = request.user
     role = getattr(user, 'role', 'EMPLOYEE')
 
+    # -------------------------------------------------------------
+    # 1. POST ACTIONS (Approval, Rejection, Assignment, Status Update)
+    # -------------------------------------------------------------
     if request.method == 'POST':
         ticket_id = request.POST.get('ticket_id')
 
+        # Update User Role (Admin only)
         if 'update_user_role' in request.POST and (role == 'ADMIN' or user.is_superuser):
             target_user_id = request.POST.get('target_user_id')
             new_role = request.POST.get('new_role')
@@ -98,7 +324,7 @@ def dashboard(request):
         if ticket_id:
             ticket = get_object_or_404(Ticket, id=ticket_id)
 
-            # 👇 NAYA: Approve Ticket
+            # Approve Ticket (Admin only)
             if 'approve_ticket' in request.POST and (role == 'ADMIN' or user.is_superuser):
                 ticket.approval_status = Ticket.ApprovalStatus.APPROVED
                 ticket.save()
@@ -109,7 +335,7 @@ def dashboard(request):
                 )
                 messages.success(request, f"Ticket #{ticket.id} approved!")
 
-            # 👇 NAYA: Reject Ticket
+            # Reject Ticket (Admin only)
             elif 'reject_ticket' in request.POST and (role == 'ADMIN' or user.is_superuser):
                 ticket.approval_status = Ticket.ApprovalStatus.REJECTED
                 ticket.save()
@@ -120,34 +346,66 @@ def dashboard(request):
                 )
                 messages.warning(request, f"Ticket #{ticket.id} rejected!")
 
+            # Assign Agent (Admin only + Trigger Celery Email)
             elif 'assign_agent' in request.POST and (role == 'ADMIN' or user.is_superuser):
                 agent_id = request.POST.get('agent_id')
-                ticket.assigned_to = User.objects.filter(id=agent_id).first() if agent_id else None
+                assigned_agent = User.objects.filter(id=agent_id).first() if agent_id else None
+                ticket.assigned_to = assigned_agent
                 ticket.save()
+
+                # Celery Async Email Trigger
+                if assigned_agent and assigned_agent.email:
+                    send_ticket_assigned_email.delay(ticket.id, assigned_agent.email)
+
                 messages.success(request, f"Ticket #{ticket.id} assigned successfully!")
 
+            # Update Status (Support/Admin + Trigger Celery Email)
             elif 'update_status' in request.POST and (role in ['SUPPORT', 'ADMIN'] or user.is_superuser):
                 new_status = request.POST.get('status')
                 ticket.status = new_status
                 ticket.save()
+
+                # Celery Async Email Trigger
+                send_status_update_email.delay(ticket.id, new_status)
+
                 messages.success(request, f"Ticket #{ticket.id} status updated to {new_status}!")
 
         return redirect('tickets:dashboard')
 
-    # 👇 Role-based QuerySet — ab approval_status ke sath
-    if role == 'ADMIN' or user.is_superuser:
-        pending_tickets = Ticket.objects.filter(approval_status='PENDING').select_related('created_by', 'category')
-        tickets = Ticket.objects.filter(approval_status='APPROVED').select_related('created_by', 'assigned_to', 'category')
-        rejected_tickets = Ticket.objects.filter(approval_status='REJECTED').select_related('created_by', 'category')
-    elif role == 'SUPPORT':
-        pending_tickets = Ticket.objects.none()
-        tickets = Ticket.objects.filter(assigned_to=user, approval_status='APPROVED').select_related('created_by', 'category')
-        rejected_tickets = Ticket.objects.none()
-    else:  # EMPLOYEE — apni khud ki har state ki tickets dekh sake
-        pending_tickets = Ticket.objects.filter(created_by=user, approval_status='PENDING').select_related('category')
-        tickets = Ticket.objects.filter(created_by=user, approval_status='APPROVED').select_related('assigned_to', 'category')
-        rejected_tickets = Ticket.objects.filter(created_by=user, approval_status='REJECTED').select_related('category')
+    # -------------------------------------------------------------
+    # 2. GET QUERYSETS (Role & Client Scoping)
+    # -------------------------------------------------------------
+    base_queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category', 'client')
 
+    if role == 'ADMIN' or user.is_superuser:
+        # Admin: Saw sabhi clients aur systems ke tickets dekhega
+        pending_tickets = base_queryset.filter(approval_status='PENDING')
+        tickets = base_queryset.filter(approval_status='APPROVED')
+        rejected_tickets = base_queryset.filter(approval_status='REJECTED')
+
+    elif role == 'SUPPORT':
+        # Support: Apne assigned tickets dekhega
+        pending_tickets = Ticket.objects.none()
+        tickets = base_queryset.filter(assigned_to=user, approval_status='APPROVED')
+        rejected_tickets = Ticket.objects.none()
+
+    else:
+        # EMPLOYEE / CLIENT USER (Client Scoping Applied here)
+        # Requirement: "clients only see their own tickets"
+        if hasattr(user, 'client') and user.client:
+            # Agar user kisi client organization se linked hai:
+            client_tickets = base_queryset.filter(client=user.client)
+            pending_tickets = client_tickets.filter(approval_status='PENDING')
+            tickets = client_tickets.filter(approval_status='APPROVED')
+            rejected_tickets = client_tickets.filter(approval_status='REJECTED')
+        else:
+            # Standalone regular user: Sirf apne banaye hue tickets dekhega
+            user_tickets = base_queryset.filter(created_by=user)
+            pending_tickets = user_tickets.filter(approval_status='PENDING')
+            tickets = user_tickets.filter(approval_status='APPROVED')
+            rejected_tickets = user_tickets.filter(approval_status='REJECTED')
+
+    # Context Data Rendering
     context = {
         'tickets': tickets,
         'pending_tickets': pending_tickets,           
@@ -156,202 +414,23 @@ def dashboard(request):
         'categories': Category.objects.all(),
         'total_count': tickets.count(),
         'open_count': tickets.filter(status='OPEN').count(),
-        'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),
+        'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),  # Corrected status filter
         'resolved_count': tickets.filter(status='RESOLVED').count(),
         'support_agents': User.objects.filter(role='SUPPORT'),
         'all_employees': User.objects.all().exclude(is_superuser=True),
-        'status_choices': Ticket.Status.choices,
+        'status_choices': Ticket.Status.choices if hasattr(Ticket, 'Status') else [
+            ('OPEN', 'Open'), 
+            ('IN_PROGRESS', 'In Progress'), 
+            ('RESOLVED', 'Resolved'), 
+            ('CLOSED', 'Closed')
+        ],
     }
     return render(request, 'tickets/dashboard.html', context)
-# @login_required
-
-# def dashboard(request):
-#     user = request.user
-#     role = getattr(user, 'role', 'EMPLOYEE')
-
-#     if request.method == 'POST':
-#         ticket_id = request.POST.get('ticket_id')
-#         if 'update_user_role' in request.POST and (role == 'ADMIN' or user.is_superuser):
-#             target_user_id = request.POST.get('target_user_id')
-#             new_role = request.POST.get('new_role')
-#             target_user = get_object_or_404(User, id=target_user_id)
-#             target_user.role = new_role
-#             target_user.save()
-#             messages.success(request, f"User {target_user.username}'s role updated to {new_role}!")
-#             return redirect('tickets:dashboard')
-#         if ticket_id:
-#             ticket = get_object_or_404(Ticket, id=ticket_id)
-#             if 'assign_agent' in request.POST and (role == 'ADMIN' or user.is_superuser):
-#                 agent_id = request.POST.get('agent_id') or request.POST.get('support_agent_id')
-#                 if agent_id:
-#                     assigned_user = User.objects.filter(id=agent_id).first()
-#                     if assigned_user:
-#                         old_status = ticket.status
-#                         if getattr(assigned_user, 'role', None) != 'SUPPORT':
-#                             assigned_user.role = 'SUPPORT'
-#                             assigned_user.save()
-#                         ticket.assigned_to = assigned_user
-#                         ticket.status = 'OPEN' 
-#                         ticket.save()
-#                         TicketHistory.objects.create(
-#                             ticket=ticket,
-#                             changed_by=request.user,
-#                             old_status=old_status,
-#                             new_status=ticket.status,
-#                             remarks=f"Assigned to {assigned_user.username}"
-#                         )
-#                         messages.success(request, f"Ticket #{ticket.id} assigned to {assigned_user.username} successfully!")
-#                     else:
-#                         messages.error(request, "Selected agent not found.")
-#                 else:
-#                     messages.error(request, "Please select an agent.")
-#             elif 'update_status' in request.POST and (role in ['SUPPORT', 'ADMIN'] or user.is_superuser):
-#                 new_status = request.POST.get('status')
-#                 if new_status:
-#                     old_status = ticket.status
-#                     ticket.status = new_status
-#                     ticket.save()
-#                     TicketHistory.objects.create(
-#                         ticket=ticket,
-#                         changed_by=request.user,
-#                         old_status=old_status,
-#                         new_status=new_status,
-#                         remarks=f"Status updated to {new_status}"
-#                     )
-#                     messages.success(request, f"Ticket #{ticket.id} status updated to {new_status}!")
-#                 else:
-#                     messages.error(request, "Please select a valid status.")
-
-#         return redirect('tickets:dashboard')
-
-#     tickets = _visible_tickets_for_user(user)
-    
-#     context = {
-#         'tickets': tickets,
-#         'user_role': role,
-#         'categories': Category.objects.all(),
-#         'total_count': tickets.count(),
-#         'open_count': tickets.filter(status='OPEN').count(),
-#         'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),
-#         'resolved_count': tickets.filter(status='RESOLVED').count(),
-#         'support_agents': User.objects.filter(role='SUPPORT'),
-#         'all_employees': User.objects.all().exclude(is_superuser=True),
-#         'status_choices': Ticket.Status.choices if hasattr(Ticket, 'Status') else [('OPEN', 'Open'), ('IN_PROGRESS', 'In Progress'), ('RESOLVED', 'Resolved'), ('CLOSED', 'Closed')],
-#     }
-#     return render(request, 'tickets/dashboard.html', context)
-
-
-
 
 @login_required
 def ticket_detail(request, ticket_id):
     ticket = get_object_or_404(_visible_tickets_for_user(request.user), id=ticket_id)
     return render(request, 'tickets/detail.html', {'ticket': ticket})
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_ticket_api(request):
-    serializer = TicketSerializer(data=request.data, context={'request': request})
-    if serializer.is_valid():
-        ticket = serializer.save()
-        return Response({
-            "message": "Ticket created successfully",
-            "ticket_id": ticket.id,
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def assign_ticket_api(request, ticket_id):
-    if not (request.user.role == 'ADMIN' or request.user.is_superuser):
-        return Response({"error": "Only Admins can assign tickets"}, status=status.HTTP_403_FORBIDDEN)
-
-    ticket = get_object_or_404(Ticket, id=ticket_id)
-    serializer = AssignTicketSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        user_id = serializer.validated_data['user_id']
-        assigned_user = CustomUser.objects.filter(id=user_id).first()
-        
-        if not assigned_user:
-            return Response({"error": "Selected user does not exist."}, status=status.HTTP_400_BAD_REQUEST)
-
-        old_status = ticket.status
-        ticket.assigned_to = assigned_user
-        
-        if hasattr(Ticket, 'Status'):
-            ticket.status = Ticket.Status.OPEN
-        else:
-            ticket.status = 'OPEN'
-            
-        ticket.save()
-
-        # Log History
-        TicketHistory.objects.create(
-            ticket=ticket,
-            changed_by=request.user,
-            old_status=old_status,
-            new_status=ticket.status,
-            remarks=f"Assigned to {assigned_user.username}"
-        )
-
-        return Response({
-            "message": f"Ticket #{ticket.id} assigned to {assigned_user.username}"
-        }, status=status.HTTP_200_OK)
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def change_status_api(request, ticket_id):
-    ticket = get_object_or_404(Ticket, id=ticket_id)
-    serializer = ChangeStatusSerializer(data=request.data)
-
-    if serializer.is_valid():
-        new_status = serializer.validated_data['status']
-        remarks = serializer.validated_data.get('remarks', '')
-
-        if hasattr(ticket, 'can_transition_to') and not ticket.can_transition_to(request.user, new_status):
-            return Response({
-                "error": f"Role '{request.user.get_role_display()}' is not allowed to transition ticket from {ticket.status} to {new_status}"
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        old_status = ticket.status
-        ticket.status = new_status
-        ticket.save()
-        TicketHistory.objects.create(
-            ticket=ticket,
-            changed_by=request.user,
-            old_status=old_status,
-            new_status=new_status,
-            remarks=remarks
-        )
-
-        return Response({
-            "message": f"Ticket #{ticket.id} status updated to {new_status}"
-        }, status=status.HTTP_200_OK)
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_category_api(request):
-    if not (request.user.role == 'ADMIN' or request.user.is_superuser):
-        return Response({"error": "Only Admins can add new categories."}, status=status.HTTP_403_FORBIDDEN)
-
-    serializer = CategorySerializer(data=request.data)
-    if serializer.is_valid():
-        category = serializer.save()
-        return Response({
-            "message": f"Category '{category.name}' created successfully!",
-            "category": serializer.data
-        }, status=status.HTTP_201_CREATED)
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 @login_required
@@ -365,12 +444,9 @@ def assign_support(request, ticket_id):
             if assigned_user:
                 old_status = ticket.status
                 ticket.assigned_to = assigned_user
-                if hasattr(Ticket, 'Status'):
-                    ticket.status = Ticket.Status.OPEN
-                else:
-                    ticket.status = 'OPEN'
-                    
+                ticket.status = getattr(Ticket.Status, 'OPEN', 'OPEN') if hasattr(Ticket, 'Status') else 'OPEN'
                 ticket.save()
+                
                 TicketHistory.objects.create(
                     ticket=ticket,
                     changed_by=request.user,
@@ -387,27 +463,27 @@ def assign_support(request, ticket_id):
     return redirect('tickets:dashboard')
 
 
-# task 4 file handling__________________
-@api_view(['POST'])
-@parser_classes([MultiPartParser, FormParser])
-@permission_classes([IsAuthenticated])
-def upload_attachment_api(request, ticket_id):
-    ticket = get_object_or_404(Ticket, id=ticket_id)
-    file_obj = request.FILES.get('file')
 
-    if not file_obj:
-        return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-    serializer = TicketAttachmentSerializer(
-        data={'file': file_obj, 'ticket': ticket.id},
-        context={'request': request},
-    )
-    if serializer.is_valid():
-        serializer.save(ticket=ticket, uploaded_by=request.user)
-        return Response({
-            "message": "Attachment uploaded successfully!",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class TicketViewSet(viewsets.ModelViewSet):
+    serializer_class = TicketSerializer
+    permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Ticket.objects.select_related('client', 'assigned_to', 'created_by').all()
+
+        # Admin / Superuser tamaam clients ke tickets dekh sakta hai
+        if user.is_staff or user.is_superuser or getattr(user, 'role', '') == 'ADMIN':
+            return queryset
+
+        # Support agent ko assigned tickets nazar aayenge
+        if getattr(user, 'role', '') == 'SUPPORT':
+            return queryset.filter(assigned_to=user)
+
+        # Client / Regular User Scoping: Sirf apni company/client ke tickets dekh sakein
+        if hasattr(user, 'client') and user.client:
+            return queryset.filter(client=user.client)
+
+        return queryset.filter(created_by=user)

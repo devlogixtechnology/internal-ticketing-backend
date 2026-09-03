@@ -118,6 +118,11 @@
               <td class="text-muted small">{{ client.created_at|date:"d M Y" }}</td>
               <td class="text-end pe-4">
                 <div class="d-flex gap-1 justify-content-end">
+                  <!-- BE2 Linkage: View Filtered Client Tickets -->
+                  <a href="{% url 'tickets:dashboard' %}?client={{ client.pk }}"
+                     class="btn btn-outline-info action-btn" title="View Client Tickets">
+                    🎟️ Tickets
+                  </a>
                   <a href="{% url 'clients:detail' client.pk %}"
                      class="btn btn-outline-primary action-btn" title="View Details">
                     👁 View

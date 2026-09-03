@@ -44,6 +44,15 @@ class Ticket(models.Model):
         max_length=10, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
     )
 
+    # Client-Scoping Foreign Key (BE2 Requirement)
+    client = models.ForeignKey(
+        CustomUser, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='client_tickets'
+    )
+
     created_by = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, related_name='created_tickets'
     )
@@ -60,6 +69,7 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"#{self.id} - {self.title}"
+
     def can_transition_to(self, user, new_status):
         if user.role == 'ADMIN' or user.is_superuser:
             return True
