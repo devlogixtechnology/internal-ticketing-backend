@@ -1,0 +1,484 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+    :root {
+        --bg-main: #0a110d;
+        --card-bg: #121e17;
+        --card-border: #1e3327;
+        --primary-green: #10b981;
+        --accent-glow: rgba(16, 185, 129, 0.15);
+        --text-bright: #f3f4f6;
+        --text-dim: #9ca3af;
+        --blue-accent: #3b82f6;
+        --orange-accent: #f59e0b;
+        --danger-red: #ef4444;
+    }
+
+    body {
+        background-color: var(--bg-main);
+        color: var(--text-bright);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    .dash-container {
+        max-width: 1350px;
+        margin: 30px auto;
+        padding: 0 20px;
+    }
+
+    /* Top Control Header */
+    .dash-header {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        padding: 22px 28px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .header-title h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .live-dot {
+        width: 10px;
+        height: 10px;
+        background-color: var(--primary-green);
+        border-radius: 50%;
+        display: inline-block;
+        box-shadow: 0 0 10px var(--primary-green);
+        animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .btn-action {
+        background: var(--card-border);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.1);
+        padding: 9px 18px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn-action:hover {
+        background: var(--primary-green);
+        color: #000;
+        box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    /* Quick Stats Grid */
+    .quick-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 18px;
+        margin-bottom: 24px;
+    }
+
+    .stat-box {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        padding: 18px 20px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        color: var(--text-dim);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+        font-size: 28px;
+        font-weight: 800;
+        margin: 8px 0;
+        color: #fff;
+    }
+
+    .mini-progress {
+        background: rgba(255, 255, 255, 0.08);
+        height: 5px;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .mini-fill {
+        height: 100%;
+        border-radius: 10px;
+    }
+
+    /* Main Section: Chart + Side Diagnostics Panel */
+    .main-grid {
+        display: grid;
+        grid-template-columns: 2.7fr 1fr;
+        gap: 24px;
+        margin-bottom: 24px;
+    }
+
+    .chart-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        padding: 24px;
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .chart-box {
+        position: relative;
+        height: 350px;
+    }
+
+    .side-panel {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .diag-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 13.5px;
+    }
+
+    /* History Table Section */
+    .history-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        padding: 24px;
+    }
+
+    .table-tools {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 18px;
+    }
+
+    .search-input {
+        background: #09100c;
+        border: 1px solid var(--card-border);
+        padding: 9px 16px;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 13px;
+        width: 260px;
+        outline: none;
+    }
+
+    .search-input:focus {
+        border-color: var(--primary-green);
+    }
+
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+
+    .history-table th {
+        text-align: left;
+        padding: 12px 16px;
+        background: #0d1712;
+        color: var(--text-dim);
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--card-border);
+    }
+
+    .history-table td {
+        padding: 13px 16px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .badge-status {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-high { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+</style>
+
+<div class="dash-container">
+    <!-- Header Bar -->
+    <div class="dash-header">
+        <div class="header-title">
+            <h1><span class="live-dot"></span> System Health Operations</h1>
+            <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-dim);">
+                Updated on page load: <strong>{% if latest_health %}{{ latest_health.timestamp|date:"h:i:s A, d M Y" }}{% else %}No logs recorded{% endif %}</strong>
+            </p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-action" onclick="exportTableToCSV('server_health_history.csv')">📥 Export CSV</button>
+            <button class="btn-action" onclick="location.reload();">🔄 Refresh & Fetch Live Data</button>
+        </div>
+    </div>
+
+    {% if latest_health %}
+    <!-- Quick Stats Overview -->
+    <div class="quick-stats">
+        <div class="stat-box">
+            <div class="stat-label">Current CPU Load</div>
+            <div class="stat-value" style="color: var(--primary-green);">{{ latest_health.cpu_usage }}%</div>
+            <div class="mini-progress">
+                <div class="mini-fill" style="width: {{ latest_health.cpu_usage }}%; background: var(--primary-green);"></div>
+            </div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">Current RAM Memory</div>
+            <div class="stat-value" style="color: var(--blue-accent);">{{ latest_health.memory_usage }}%</div>
+            <div class="mini-progress">
+                <div class="mini-fill" style="width: {{ latest_health.memory_usage }}%; background: var(--blue-accent);"></div>
+            </div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">Disk Storage Used</div>
+            <div class="stat-value" style="color: #a78bfa;">{{ latest_health.disk_usage }}%</div>
+            <div class="mini-progress">
+                <div class="mini-fill" style="width: {{ latest_health.disk_usage }}%; background: #a78bfa;"></div>
+            </div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">Avg CPU (Recent)</div>
+            <div class="stat-value">{{ avg_cpu }}%</div>
+            <div class="mini-progress">
+                <div class="mini-fill" style="width: {{ avg_cpu }}%; background: #9ca3af;"></div>
+            </div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">Total Logged Entries</div>
+            <div class="stat-value" style="color: var(--orange-accent);">{{ total_logs_count }}</div>
+            <div class="mini-progress">
+                <div class="mini-fill" style="width: 100%; background: var(--orange-accent);"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Section: Chart + Diagnostics Panel -->
+    <div class="main-grid">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h2 style="font-size: 16px; margin:0;">Resource Usage Trends (Past Logs)</h2>
+            </div>
+            <div class="chart-box">
+                <canvas id="proDarkChart"></canvas>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <div>
+                <h3 style="font-size: 15px; margin-top:0; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; color: #fff;">
+                    System Overview
+                </h3>
+                <div class="diag-item">
+                    <span style="color: var(--text-dim);">Server Uptime</span>
+                    <strong style="color: #fff;">{{ latest_health.system_uptime }}</strong>
+                </div>
+                <div class="diag-item">
+                    <span style="color: var(--text-dim);">Current State</span>
+                    {% if latest_health.cpu_usage < 80 and latest_health.memory_usage < 80 %}
+                        <span style="color: var(--primary-green); font-weight: 700;">Healthy</span>
+                    {% else %}
+                        <span style="color: var(--danger-red); font-weight: 700;">High Usage</span>
+                    {% endif %}
+                </div>
+                <div class="diag-item">
+                    <span style="color: var(--text-dim);">Peak Recorded CPU</span>
+                    <strong style="color: var(--orange-accent);">{{ max_cpu }}%</strong>
+                </div>
+            </div>
+
+            <div style="background: rgba(16, 185, 129, 0.06); padding: 14px; border-radius: 10px; border: 1px solid var(--card-border);">
+                <small style="color: var(--text-dim); display: block; margin-bottom: 4px;">Sync Mechanism</small>
+                <span style="font-size: 12px; color: var(--primary-green); font-weight: 600;">Auto-logs dynamic status on every Refresh (F5).</span>
+            </div>
+        </div>
+    </div>
+    <div class="history-card">
+        <div class="table-tools">
+            <h3 style="margin: 0; font-size: 16px; color: #fff;">Previous Recorded Server Logs</h3>
+            <input type="text" id="tableSearch" class="search-input" placeholder="Search by time or date..." onkeyup="filterTable()">
+        </div>
+
+        <div style="max-height: 400px; overflow-y: auto;">
+            <table class="history-table" id="logsTable">
+                <thead>
+                    <tr>
+                        <th>Recorded Date & Time</th>
+                        <th>CPU Load</th>
+                        <th>RAM Memory</th>
+                        <th>Disk Storage</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_logs %}
+                    <tr>
+                        <td>
+                            <strong style="color: #fff;">{{ log.timestamp|date:"Y-m-d" }}</strong>
+                            <span style="color: var(--text-dim); margin-left: 8px;">{{ log.timestamp|date:"H:i:s" }}</span>
+                        </td>
+                        <td>{{ log.cpu_usage }}%</td>
+                        <td>{{ log.memory_usage }}%</td>
+                        <td>{{ log.disk_usage }}%</td>
+                        <td>
+                            {% if log.cpu_usage < 80 and log.memory_usage < 80 %}
+                                <span class="badge-status badge-ok">HEALTHY</span>
+                            {% else %}
+                                <span class="badge-status badge-high">HIGH LOAD</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    {% if latest_health %}
+    // Parse Safely
+    const timestamps = JSON.parse('{{ timestamps|safe }}');
+    const cpuData = JSON.parse('{{ cpu_data|safe }}');
+    const ramData = JSON.parse('{{ ram_data|safe }}');
+    const diskData = JSON.parse('{{ disk_data|safe }}');
+
+    const canvasElem = document.getElementById('proDarkChart');
+    if (canvasElem) {
+        const ctx = canvasElem.getContext('2d');
+        
+        const cpuGrad = ctx.createLinearGradient(0, 0, 0, 300);
+        cpuGrad.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+        cpuGrad.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+        const ramGrad = ctx.createLinearGradient(0, 0, 0, 300);
+        ramGrad.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+        ramGrad.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: timestamps,
+                datasets: [
+                    {
+                        label: 'CPU Usage (%)',
+                        data: cpuData,
+                        borderColor: '#10b981',
+                        backgroundColor: cpuGrad,
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: 'RAM Usage (%)',
+                        data: ramData,
+                        borderColor: '#3b82f6',
+                        backgroundColor: ramGrad,
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#9ca3af', font: { family: 'Inter', size: 12 } } }
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        grid: { color: '#1e3327' },
+                        ticks: { color: '#9ca3af', callback: v => v + '%' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#9ca3af' }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
+    function filterTable() {
+        let input = document.getElementById("tableSearch").value.toUpperCase();
+        let tr = document.getElementById("logsTable").getElementsByTagName("tr");
+        for (let i = 1; i < tr.length; i++) {
+            let td = tr[i].innerText;
+            tr[i].style.display = td.toUpperCase().indexOf(input) > -1 ? "" : "none";
+        }
+    }
+    function exportTableToCSV(filename) {
+        let csv = [];
+        let rows = document.querySelectorAll("#logsTable tr");
+        for (let i = 0; i < rows.length; i++) {
+            let row = [], cols = rows[i].querySelectorAll("td, th");
+            for (let j = 0; j < cols.length; j++) row.push(cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " "));
+            csv.push(row.join(","));
+        }
+        let csvFile = new Blob([csv.join("\n")], {type: "text/csv"});
+        let downloadLink = document.createElement("a");
+        downloadLink.download = filename;
+        downloadLink.href = window.URL.createObjectURL(csvFile);
+        downloadLink.click();
+    }
+</script>
+{% endblock %}
