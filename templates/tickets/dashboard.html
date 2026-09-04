@@ -28,6 +28,16 @@
 
         <!-- Dynamic Action Buttons -->
         <div class="d-flex gap-2">
+            
+            <!-- ======================================================== -->
+            <!-- TASK BE4: API KEY MANAGEMENT BUTTON (Staff/Admin Only)   -->
+            <!-- ======================================================== -->
+            {% if user_role == 'ADMIN' or user.is_superuser or user.is_staff %}
+            <a href="{% url 'accounts:api_keys_manage' %}" class="btn btn-warning fw-bold shadow-sm">
+                🔑 API Keys Management
+            </a>
+            {% endif %}
+
             {% if user_role == 'ADMIN' or user.is_superuser %}
             <button type="button" class="btn btn-outline-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#createCategoryModal">
                 + Add Category

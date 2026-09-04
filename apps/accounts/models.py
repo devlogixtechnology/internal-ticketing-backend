@@ -1,5 +1,9 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+import secrets
+import hashlib
+from datetime import timedelta
+from django.utils import timezone
 
 
 class Department(models.Model):
@@ -53,3 +57,35 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+
+
+class APIKey(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='api_keys')
+    prefix = models.CharField(max_length=8)
+    hashed_key = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    @classmethod
+    def generate_key(cls, user):
+        raw_key = f"sk_{secrets.token_urlsafe(32)}"
+        prefix = raw_key[:8]
+        hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+
+        api_key_obj = cls.objects.create(
+            user=user,
+            prefix=prefix,
+            hashed_key=hashed_key
+        )
+        return api_key_obj, raw_key
+
+
+class MagicLinkToken(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='magic_tokens')
+    token = models.CharField(max_length=64, unique=True, default=secrets.token_urlsafe)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
+
+    def is_valid(self):
+        expiration_time = self.created_at + timedelta(minutes=15)
+        return not self.is_used and timezone.now() <= expiration_time
