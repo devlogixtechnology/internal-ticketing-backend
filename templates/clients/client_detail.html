@@ -64,13 +64,18 @@
   <!-- ── Client Header Panel ─────────────────────────────── -->
   <div class="detail-header d-flex flex-wrap gap-3 justify-content-between align-items-center">
     <div>
-      <div class="d-flex align-items-center gap-2 mb-1">
+      <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
         <h2 class="fw-bold mb-0">{{ client.name }}</h2>
         <span class="client-code">{{ client.code }}</span>
         {% if client.is_active %}
           <span class="badge bg-success ms-1">Active</span>
         {% else %}
           <span class="badge bg-danger ms-1">Inactive</span>
+        {% endif %}
+        {% if client.enforce_whitelisting %}
+          <span class="badge bg-danger ms-1" id="badge-enforce-whitelisting" title="Strict Mode: Non-whitelisted access is blocked with 403">🔒 Strict Whitelisting</span>
+        {% else %}
+          <span class="badge bg-warning text-dark ms-1" id="badge-grace-mode" title="Grace Mode: Non-whitelisted access is logged but allowed">🛡️ Grace Mode Active</span>
         {% endif %}
       </div>
       <p class="mb-0 opacity-75 small">
@@ -93,6 +98,33 @@
               data-bs-toggle="modal" data-bs-target="#deleteClientModal" id="btn-delete-client">
         🗑️ Delete
       </button>
+    </div>
+  </div>
+
+  <!-- ── Grace Mode Policy Banner & Direct Toggle ─────────── -->
+  <div class="card shadow-sm border-0 mb-4 bg-white mt-3">
+    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2 py-3 px-4">
+      <div>
+        <h6 class="fw-bold mb-1 d-flex align-items-center gap-2">
+          {% if client.enforce_whitelisting %}
+            <span class="text-danger">🔒 Strict Whitelisting Enforced</span>
+          {% else %}
+            <span class="text-warning-emphasis">🛡️ Grace Mode Active (Non-blocking)</span>
+          {% endif %}
+        </h6>
+        <p class="text-muted small mb-0">
+          {% if client.enforce_whitelisting %}
+            Incoming requests from unapproved IP addresses or domains are strictly blocked with <code>403 Forbidden</code>.
+          {% else %}
+            Incoming requests from unapproved IP addresses or domains are permitted to proceed, and every attempt is recorded in the audit log.
+          {% endif %}
+        </p>
+      </div>
+      <div>
+        <a href="{% url 'clients:edit' client.pk %}" class="btn btn-sm btn-outline-primary fw-semibold" id="btn-toggle-grace-mode">
+          ⚙️ Toggle Grace Mode / Edit Policy
+        </a>
+      </div>
     </div>
   </div>
 
@@ -376,6 +408,57 @@
 
     </div><!-- /collapseIPs -->
   </div><!-- /ips card -->
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- SECTION 4 — ACCESS ATTEMPT AUDIT LOG                 -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="card shadow-sm section-card mt-4" id="card-audit-logs">
+    <div class="card-header d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse" data-bs-target="#collapseAuditLogs"
+         aria-expanded="true"
+         id="header-audit-logs">
+      <h6 class="fw-bold mb-0">📋 Access Audit Logs (Recent {{ access_logs|length }})</h6>
+      <span class="chevron text-muted">▼</span>
+    </div>
+
+    <div class="collapse show" id="collapseAuditLogs">
+      {% if access_logs %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 detail-table" id="audit-logs-table">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">Status</th>
+              <th>IP Address</th>
+              <th>Domain</th>
+              <th>Path</th>
+              <th class="text-end pe-3">Attempted At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in access_logs %}
+            <tr>
+              <td class="ps-3">
+                {% if log.status == 'PASSED' %}
+                  <span class="badge bg-success">PASSED</span>
+                {% else %}
+                  <span class="badge bg-danger">BLOCKED</span>
+                {% endif %}
+              </td>
+              <td><code>{{ log.ip_address|default:"—" }}</code></td>
+              <td>{{ log.domain|default:"—" }}</td>
+              <td><small class="text-muted font-monospace">{{ log.path }}</small></td>
+              <td class="text-end pe-3 text-muted small">{{ log.created_at|date:"Y-m-d H:i:s" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-center py-3 mb-0 small">No access attempts recorded yet for this client.</p>
+      {% endif %}
+    </div>
+  </div>
 
 </div><!-- /container-fluid -->
 

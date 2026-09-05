@@ -85,7 +85,7 @@
         </div>
 
         <!-- Is Active -->
-        <div class="mb-4">
+        <div class="mb-3">
           <div class="form-check">
             {{ form.is_active }}
             <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">
@@ -93,6 +93,23 @@
             </label>
           </div>
           <div class="help-text">Inactive clients are excluded from all system checks.</div>
+        </div>
+
+        <!-- Enforce Whitelisting (Grace Mode Toggle) -->
+        <div class="mb-4 p-3 rounded bg-light border">
+          <div class="form-check form-switch mb-1">
+            {{ form.enforce_whitelisting }}
+            <label class="form-check-label fw-bold" for="{{ form.enforce_whitelisting.id_for_label }}">
+              🔒 Enforce Whitelisting (Strict Mode)
+            </label>
+          </div>
+          <div class="help-text text-muted mb-0">
+            <strong>Checked (Default):</strong> Strictly blocks non-whitelisted IP addresses and domains with a <code>403 Forbidden</code>.<br>
+            <strong>Unchecked (Grace Mode):</strong> Allows incoming requests from non-whitelisted IPs/domains, recording each attempt in the access audit log as <code>PASSED</code>.
+          </div>
+          {% for error in form.enforce_whitelisting.errors %}
+            <div class="field-error">{{ error }}</div>
+          {% endfor %}
         </div>
 
         <!-- Buttons -->

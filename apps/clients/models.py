@@ -64,6 +64,10 @@ class Client(models.Model):
         help_text="Short, URL-safe identifier. Auto-generated from name if left blank.",
     )
     is_active = models.BooleanField(default=True)
+    enforce_whitelisting = models.BooleanField(
+        default=True,
+        help_text="If True, strictly block non-whitelisted access. If False (Grace Mode), log the attempt but allow access.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -177,3 +181,40 @@ class WhitelistedIP(models.Model):
     def __str__(self) -> str:
         label = f" — {self.description}" if self.description else ""
         return f"{self.ip_or_cidr}{label} ({self.client.code})"
+
+
+# ---------------------------------------------------------------------------
+# AccessAttemptLog (BE5: Audit Logging & Grace Mode)
+# ---------------------------------------------------------------------------
+
+class AccessAttemptLog(models.Model):
+    """
+    Audit log for tenant access attempts, tracking allowed and blocked requests.
+    """
+
+    STATUS_CHOICES = [
+        ("PASSED", "Passed"),
+        ("BLOCKED", "Blocked"),
+    ]
+
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="access_logs",
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    domain = models.CharField(max_length=255, null=True, blank=True)
+    path = models.CharField(max_length=255, default="/")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Access Attempt Log"
+        verbose_name_plural = "Access Attempt Logs"
+
+    def __str__(self) -> str:
+        client_code = self.client.code if self.client else "Unknown"
+        return f"[{self.status}] {self.ip_address or self.domain} -> {self.path} ({client_code})"

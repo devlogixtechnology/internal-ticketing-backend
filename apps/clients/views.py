@@ -100,7 +100,7 @@ def client_detail(request, pk):
         return _forbidden()
 
     client = get_object_or_404(
-        Client.objects.prefetch_related("contacts", "whitelisted_domains", "whitelisted_ips"),
+        Client.objects.prefetch_related("contacts", "whitelisted_domains", "whitelisted_ips", "access_logs"),
         pk=pk,
     )
 
@@ -109,6 +109,7 @@ def client_detail(request, pk):
         "contacts":      client.contacts.all(),
         "domains":       client.whitelisted_domains.all(),
         "ips":           client.whitelisted_ips.all(),
+        "access_logs":   client.access_logs.all()[:25],
         "contact_form":  ClientContactForm(),
         "domain_form":   WhitelistedDomainForm(),
         "ip_form":       WhitelistedIPForm(),

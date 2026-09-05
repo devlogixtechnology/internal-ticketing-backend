@@ -27,14 +27,16 @@ class ClientForm(forms.ModelForm):
 
     class Meta:
         model  = Client
-        fields = ["name", "code", "is_active"]
+        fields = ["name", "code", "is_active", "enforce_whitelisting"]
         widgets = {
-            "name":      forms.TextInput(attrs={**_INPUT,  "placeholder": "e.g. Acme Corporation"}),
-            "code":      forms.TextInput(attrs={**_INPUT,  "placeholder": "Auto-generated if left blank"}),
-            "is_active": forms.CheckboxInput(attrs=_CHECK),
+            "name":                 forms.TextInput(attrs={**_INPUT,  "placeholder": "e.g. Acme Corporation"}),
+            "code":                 forms.TextInput(attrs={**_INPUT,  "placeholder": "Auto-generated if left blank"}),
+            "is_active":            forms.CheckboxInput(attrs=_CHECK),
+            "enforce_whitelisting": forms.CheckboxInput(attrs=_CHECK),
         }
         help_texts = {
             "code": "URL-safe slug (auto-generated from name when left blank).",
+            "enforce_whitelisting": "If True, strictly block non-whitelisted access. If False (Grace Mode), log the attempt but allow access.",
         }
 
 

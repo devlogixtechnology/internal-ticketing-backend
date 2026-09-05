@@ -6,7 +6,13 @@ Django Admin configuration for tenant/whitelist models.
 
 from django.contrib import admin
 
-from .models import Client, ClientContact, WhitelistedDomain, WhitelistedIP
+from .models import (
+    AccessAttemptLog,
+    Client,
+    ClientContact,
+    WhitelistedDomain,
+    WhitelistedIP,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -40,8 +46,8 @@ class WhitelistedIPInline(admin.TabularInline):
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display  = ("name", "code", "is_active", "contact_count", "created_at")
-    list_filter   = ("is_active",)
+    list_display  = ("name", "code", "is_active", "enforce_whitelisting", "contact_count", "created_at")
+    list_filter   = ("is_active", "enforce_whitelisting")
     search_fields = ("name", "code")
     prepopulated_fields = {"code": ("name",)}
     readonly_fields = ("created_at",)
@@ -90,3 +96,17 @@ class WhitelistedIPAdmin(admin.ModelAdmin):
     search_fields = ("ip_or_cidr", "description", "client__name", "client__code")
     autocomplete_fields = ("client",)
     ordering = ("ip_or_cidr",)
+
+
+# ---------------------------------------------------------------------------
+# AccessAttemptLog (BE5: Audit Log Admin)
+# ---------------------------------------------------------------------------
+
+@admin.register(AccessAttemptLog)
+class AccessAttemptLogAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "status", "client", "ip_address", "domain", "path")
+    list_filter = ("status", "client", "created_at")
+    search_fields = ("ip_address", "domain", "path", "client__name", "client__code")
+    readonly_fields = ("client", "ip_address", "domain", "path", "status", "created_at")
+    ordering = ("-created_at",)
+
