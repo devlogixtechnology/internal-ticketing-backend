@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ form_title }} — DevLogix{% endblock %}
+
+{% block content %}
+<style>
+  .form-card {
+    border-radius: 16px;
+    border: none;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .form-card .card-header {
+    border-radius: 16px 16px 0 0;
+    background: linear-gradient(135deg, var(--devlogix-navy) 0%, #1e3a5f 100%);
+    color: #fff;
+    padding: 1.2rem 1.5rem;
+  }
+  .field-error { font-size: .8rem; color: #dc3545; margin-top: .25rem; }
+  .form-label  { font-weight: 600; font-size: .85rem; color: var(--devlogix-navy); }
+  .help-text   { font-size: .75rem; color: var(--devlogix-gray); margin-top: .2rem; }
+  .is-invalid-field .form-control,
+  .is-invalid-field .form-select { border-color: #dc3545; }
+</style>
+
+<div class="container py-5">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'clients:list' %}" class="text-decoration-none">Tenant Management</a>
+      </li>
+      {% if client %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'clients:detail' client.pk %}" class="text-decoration-none">{{ client.name }}</a>
+      </li>
+      {% endif %}
+      <li class="breadcrumb-item active">{{ form_title }}</li>
+    </ol>
+  </nav>
+
+  <div class="card shadow form-card">
+    <!-- Header -->
+    <div class="card-header d-flex align-items-center gap-2">
+      <span style="font-size:1.5rem;">🏢</span>
+      <div>
+        <h5 class="mb-0 fw-bold">{{ form_title }}</h5>
+        <small class="opacity-75">All fields marked * are required</small>
+      </div>
+    </div>
+
+    <div class="card-body p-4">
+      <form method="post" novalidate id="client-form">
+        {% csrf_token %}
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger py-2" role="alert">
+          {% for error in form.non_field_errors %}
+            <div>{{ error }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Name -->
+        <div class="mb-3 {% if form.name.errors %}is-invalid-field{% endif %}">
+          <label for="{{ form.name.id_for_label }}" class="form-label">
+            Client Name <span class="text-danger">*</span>
+          </label>
+          {{ form.name }}
+          {% for error in form.name.errors %}
+            <div class="field-error">{{ error }}</div>
+          {% endfor %}
+        </div>
+
+        <!-- Code -->
+        <div class="mb-3 {% if form.code.errors %}is-invalid-field{% endif %}">
+          <label for="{{ form.code.id_for_label }}" class="form-label">Short Code / Slug</label>
+          {{ form.code }}
+          <div class="help-text">{{ form.code.help_text }}</div>
+          {% for error in form.code.errors %}
+            <div class="field-error">{{ error }}</div>
+          {% endfor %}
+        </div>
+
+        <!-- Is Active -->
+        <div class="mb-3">
+          <div class="form-check">
+            {{ form.is_active }}
+            <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">
+              Mark as Active
+            </label>
+          </div>
+          <div class="help-text">Inactive clients are excluded from all system checks.</div>
+        </div>
+
+        <!-- Enforce Whitelisting (Grace Mode Toggle) -->
+        <div class="mb-4 p-3 rounded bg-light border">
+          <div class="form-check form-switch mb-1">
+            {{ form.enforce_whitelisting }}
+            <label class="form-check-label fw-bold" for="{{ form.enforce_whitelisting.id_for_label }}">
+              🔒 Enforce Whitelisting (Strict Mode)
+            </label>
+          </div>
+          <div class="help-text text-muted mb-0">
+            <strong>Checked (Default):</strong> Strictly blocks non-whitelisted IP addresses and domains with a <code>403 Forbidden</code>.<br>
+            <strong>Unchecked (Grace Mode):</strong> Allows incoming requests from non-whitelisted IPs/domains, recording each attempt in the access audit log as <code>PASSED</code>.
+          </div>
+          {% for error in form.enforce_whitelisting.errors %}
+            <div class="field-error">{{ error }}</div>
+          {% endfor %}
+        </div>
+
+        <!-- Buttons -->
+        <div class="d-flex gap-2 justify-content-end border-top pt-3">
+          {% if client %}
+          <a href="{% url 'clients:detail' client.pk %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+          {% else %}
+          <a href="{% url 'clients:list' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+          {% endif %}
+          <button type="submit" class="btn btn-devlogix px-4" id="submit-client-form">
+            {{ submit_label }}
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div><!-- /card -->
+
+</div><!-- /container -->
+{% endblock %}
