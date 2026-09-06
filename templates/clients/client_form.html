@@ -51,55 +51,47 @@
     </div>
 
     <div class="card-body p-4">
+      <div id="api-alert-container"></div>
+
       <form method="post" novalidate id="client-form">
         {% csrf_token %}
 
-        <!-- Non-field errors -->
-        {% if form.non_field_errors %}
-        <div class="alert alert-danger py-2" role="alert">
-          {% for error in form.non_field_errors %}
-            <div>{{ error }}</div>
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        <!-- Name -->
-        <div class="mb-3 {% if form.name.errors %}is-invalid-field{% endif %}">
-          <label for="{{ form.name.id_for_label }}" class="form-label">
+        <!-- Client Name -->
+        <div class="mb-3">
+          <label for="client_name" class="form-label">
             Client Name <span class="text-danger">*</span>
           </label>
-          {{ form.name }}
-          {% for error in form.name.errors %}
-            <div class="field-error">{{ error }}</div>
-          {% endfor %}
+          <input type="text" name="client_name" id="client_name" class="form-control" placeholder="e.g. Acme Corp" required>
         </div>
 
-        <!-- Code -->
-        <div class="mb-3 {% if form.code.errors %}is-invalid-field{% endif %}">
-          <label for="{{ form.code.id_for_label }}" class="form-label">Short Code / Slug</label>
-          {{ form.code }}
-          <div class="help-text">{{ form.code.help_text }}</div>
-          {% for error in form.code.errors %}
-            <div class="field-error">{{ error }}</div>
-          {% endfor %}
-        </div>
-
-        <!-- Is Active -->
+        <!-- Contact Name -->
         <div class="mb-3">
-          <div class="form-check">
-            {{ form.is_active }}
-            <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">
-              Mark as Active
-            </label>
-          </div>
-          <div class="help-text">Inactive clients are excluded from all system checks.</div>
+          <label for="contact_name" class="form-label">
+            Contact Person Name <span class="text-danger">*</span>
+          </label>
+          <input type="text" name="contact_name" id="contact_name" class="form-control" placeholder="e.g. John Doe" required>
+        </div>
+
+        <!-- Contact Email -->
+        <div class="mb-3">
+          <label for="contact_email" class="form-label">
+            Contact Email <span class="text-danger">*</span>
+          </label>
+          <input type="email" name="contact_email" id="contact_email" class="form-control" placeholder="e.g. john@example.com" required>
+        </div>
+
+        <!-- Domain Name -->
+        <div class="mb-3">
+          <label for="domain_name" class="form-label">Whitelisted Domain Name</label>
+          <input type="text" name="domain_name" id="domain_name" class="form-control" placeholder="e.g. acme.com">
+          <div class="help-text">Domain to automatically whitelist for this client tenant.</div>
         </div>
 
         <!-- Enforce Whitelisting (Grace Mode Toggle) -->
         <div class="mb-4 p-3 rounded bg-light border">
           <div class="form-check form-switch mb-1">
-            {{ form.enforce_whitelisting }}
-            <label class="form-check-label fw-bold" for="{{ form.enforce_whitelisting.id_for_label }}">
+            <input type="checkbox" class="form-check-input" id="enforce_whitelisting" name="enforce_whitelisting" checked>
+            <label class="form-check-label fw-bold" for="enforce_whitelisting">
               🔒 Enforce Whitelisting (Strict Mode)
             </label>
           </div>
@@ -107,24 +99,15 @@
             <strong>Checked (Default):</strong> Strictly blocks non-whitelisted IP addresses and domains with a <code>403 Forbidden</code>.<br>
             <strong>Unchecked (Grace Mode):</strong> Allows incoming requests from non-whitelisted IPs/domains, recording each attempt in the access audit log as <code>PASSED</code>.
           </div>
-          {% for error in form.enforce_whitelisting.errors %}
-            <div class="field-error">{{ error }}</div>
-          {% endfor %}
         </div>
 
         <!-- Buttons -->
         <div class="d-flex gap-2 justify-content-end border-top pt-3">
-          {% if client %}
-          <a href="{% url 'clients:detail' client.pk %}" class="btn btn-outline-secondary">
-            Cancel
-          </a>
-          {% else %}
           <a href="{% url 'clients:list' %}" class="btn btn-outline-secondary">
             Cancel
           </a>
-          {% endif %}
-          <button type="submit" class="btn btn-devlogix px-4" id="submit-client-form">
-            {{ submit_label }}
+          <button type="submit" class="btn btn-primary px-4" id="submit-client-form">
+            {{ submit_label|default:"Onboard Client" }}
           </button>
         </div>
 
@@ -133,4 +116,59 @@
   </div><!-- /card -->
 
 </div><!-- /container -->
+
+<!-- AJAX JS Script for Onboarding API Integration -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("client-form");
+    const submitBtn = document.getElementById("submit-client-form");
+    const alertContainer = document.getElementById("api-alert-container");
+
+    if (form) {
+        form.addEventListener("submit", async function (e) {
+            e.preventDefault();
+            alertContainer.innerHTML = "";
+
+            const payload = {
+                client_name: document.getElementById("client_name").value.trim(),
+                contact_name: document.getElementById("contact_name").value.trim(),
+                contact_email: document.getElementById("contact_email").value.trim(),
+                domain_name: document.getElementById("domain_name").value.trim()
+            };
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = "Processing...";
+
+            try {
+                const response = await fetch("/api/admin/clients/onboard/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.status === 201) {
+                    alertContainer.innerHTML = `<div class="alert alert-success">Client onboarded successfully!</div>`;
+                    setTimeout(() => {
+                        window.location.href = "{% url 'clients:list' %}";
+                    }, 1200);
+                } else if (response.status === 429) {
+                    alertContainer.innerHTML = `<div class="alert alert-danger"><strong>Rate Limit Exceeded:</strong> You have reached the limit of 10 requests per minute. Please try again in a minute.</div>`;
+                } else {
+                    alertContainer.innerHTML = `<div class="alert alert-danger"><strong>Error:</strong> ${data.error || 'Failed to onboard client.'}</div>`;
+                }
+            } catch (err) {
+                alertContainer.innerHTML = `<div class="alert alert-danger">Network error. Please try again.</div>`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = "{{ submit_label|default:'Onboard Client' }}";
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -93,7 +93,9 @@ TENANT_WHITELIST_EXEMPT_PATHS = [
     '/media/',
     '/accounts/',
     '/dashboard/clients/',
+    "/api/admin/clients/onboard/",
 ]
+
 
 
 ROOT_URLCONF = 'core.urls'
@@ -130,7 +132,18 @@ DATABASES = {
     }
 }
 
-
+# settings.py
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day',
+        'onboarding': '10/minute',  # <--- Yeh line task BE6 ke liye lazmi hai
+    }
+}
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 

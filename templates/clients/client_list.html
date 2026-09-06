@@ -43,25 +43,25 @@
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3 shadow-sm border-start border-4 border-primary">
         <span class="section-header">Total Clients</span>
-        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_clients }}</h2>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_clients|default:clients.count }}</h2>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3 shadow-sm border-start border-4 border-success">
         <span class="section-header">Active Clients</span>
-        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ active_clients }}</h2>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ active_clients|default:0 }}</h2>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3 shadow-sm border-start border-4 border-info">
         <span class="section-header">Whitelisted Domains</span>
-        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_domains }}</h2>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_domains|default:0 }}</h2>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3 shadow-sm border-start border-4 border-warning">
         <span class="section-header">Whitelisted IPs</span>
-        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_ips }}</h2>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_ips|default:0 }}</h2>
       </div>
     </div>
   </div>
@@ -118,7 +118,6 @@
               <td class="text-muted small">{{ client.created_at|date:"d M Y" }}</td>
               <td class="text-end pe-4">
                 <div class="d-flex gap-1 justify-content-end">
-                  <!-- BE2 Linkage: View Filtered Client Tickets -->
                   <a href="{% url 'tickets:dashboard' %}?client={{ client.pk }}"
                      class="btn btn-outline-info action-btn" title="View Client Tickets">
                     🎟️ Tickets
@@ -131,7 +130,6 @@
                      class="btn btn-outline-secondary action-btn" title="Edit Client">
                     ✏️ Edit
                   </a>
-                  <!-- Delete trigger -->
                   <button type="button"
                           class="btn btn-outline-danger action-btn"
                           data-bs-toggle="modal"
@@ -158,7 +156,7 @@
 
 </div><!-- /container-fluid -->
 
-<!-- ── Delete Confirmation Modals ─────────────────────────────────────────── -->
+<!-- Delete Confirmation Modals -->
 {% for client in clients %}
 <div class="modal fade" id="deleteModal-{{ client.pk }}" tabindex="-1"
      aria-labelledby="deleteModalLabel-{{ client.pk }}" aria-hidden="true">

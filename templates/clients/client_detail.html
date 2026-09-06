@@ -80,16 +80,16 @@
       </div>
       <p class="mb-0 opacity-75 small">
         Created: {{ client.created_at|date:"d M Y, H:i" }} &nbsp;|&nbsp;
-        {{ client.tickets.count }} Ticket{{ client.tickets.count|pluralize }} &nbsp;|&nbsp;
-        {{ contacts.count }} Contact{{ contacts.count|pluralize }} &nbsp;|&nbsp;
-        {{ domains.count }} Domain{{ domains.count|pluralize }} &nbsp;|&nbsp;
-        {{ ips.count }} IP/CIDR entr{{ ips.count|pluralize:"y,ies" }}
+        {{ client.tickets.count|default:0 }} Ticket{{ client.tickets.count|pluralize }} &nbsp;|&nbsp;
+        {{ contacts.count|default:0 }} Contact{{ contacts.count|pluralize }} &nbsp;|&nbsp;
+        {{ domains.count|default:0 }} Domain{{ domains.count|pluralize }} &nbsp;|&nbsp;
+        {{ ips.count|default:0 }} IP/CIDR entr{{ ips.count|pluralize:"y,ies" }}
       </p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <!-- BE2 Linkage: Direct button to view this client's tickets -->
+      <!-- Direct button to view this client's tickets -->
       <a href="{% url 'tickets:dashboard' %}?client={{ client.pk }}" class="btn btn-info text-white fw-semibold" id="btn-view-client-tickets">
-        🎟️ View Tickets ({{ client.tickets.count }})
+        🎟️ View Tickets ({{ client.tickets.count|default:0 }})
       </a>
       <a href="{% url 'clients:edit' client.pk %}" class="btn btn-light fw-semibold" id="btn-edit-client">
         ✏️ Edit Client
@@ -139,7 +139,7 @@
          data-bs-toggle="collapse" data-bs-target="#collapseContacts"
          aria-expanded="{% if open_section == 'contacts' or contacts %}true{% else %}false{% endif %}"
          id="header-contacts">
-      <h6 class="fw-bold mb-0">👤 Contacts ({{ contacts.count }})</h6>
+      <h6 class="fw-bold mb-0">👤 Contacts ({{ contacts.count|default:0 }})</h6>
       <span class="chevron text-muted">▼</span>
     </div>
 
@@ -210,9 +210,14 @@
               {{ contact_form.designation }}
             </div>
             <div class="col-md-2 d-flex align-items-end">
-              <button type="submit" class="btn btn-devlogix w-100" id="btn-add-contact">Add</button>
+              <button type="submit" class="btn btn-teal w-100" id="btn-add-contact">Add</button>
             </div>
           </div>
+          {% if contact_form.non_field_errors %}
+          <div class="alert alert-danger mt-2 py-2 small">
+            {% for e in contact_form.non_field_errors %}{{ e }}{% endfor %}
+          </div>
+          {% endif %}
         </form>
       </div>
 
@@ -229,7 +234,7 @@
          data-bs-toggle="collapse" data-bs-target="#collapseDomains"
          aria-expanded="{% if open_section == 'domains' or domains %}true{% else %}false{% endif %}"
          id="header-domains">
-      <h6 class="fw-bold mb-0">🌐 Whitelisted Domains ({{ domains.count }})</h6>
+      <h6 class="fw-bold mb-0">🌐 Whitelisted Domains ({{ domains.count|default:0 }})</h6>
       <span class="chevron text-muted">▼</span>
     </div>
 
@@ -307,7 +312,7 @@
               <label class="form-label mb-0" for="{{ domain_form.is_active.id_for_label }}">Active</label>
             </div>
             <div class="col-md-4">
-              <button type="submit" class="btn btn-devlogix w-100" id="btn-add-domain">Whitelist Domain</button>
+              <button type="submit" class="btn btn-teal w-100" id="btn-add-domain">Whitelist Domain</button>
             </div>
           </div>
           {% if domain_form.non_field_errors %}
@@ -323,7 +328,7 @@
 
 
   <!-- ════════════════════════════════════════════════════ -->
-  <!-- SECTION 3 — WHITELISTED IPs / CIDRs                 -->
+  <!-- SECTION 3 — WHITELISTED IPs / CIDRs                  -->
   <!-- ════════════════════════════════════════════════════ -->
   <div class="card shadow-sm section-card" id="card-ips">
 
@@ -331,7 +336,7 @@
          data-bs-toggle="collapse" data-bs-target="#collapseIPs"
          aria-expanded="{% if open_section == 'ips' or ips %}true{% else %}false{% endif %}"
          id="header-ips">
-      <h6 class="fw-bold mb-0">🛡️ Whitelisted IPs / CIDRs ({{ ips.count }})</h6>
+      <h6 class="fw-bold mb-0">🛡️ Whitelisted IPs / CIDRs ({{ ips.count|default:0 }})</h6>
       <span class="chevron text-muted">▼</span>
     </div>
 
@@ -390,16 +395,14 @@
               {{ ip_form.description }}
             </div>
             <div class="col-md-3">
-              <button type="submit" class="btn btn-devlogix w-100" id="btn-add-ip">Whitelist IP</button>
+              <button type="submit" class="btn btn-teal w-100" id="btn-add-ip">Whitelist IP</button>
             </div>
           </div>
-          <!-- Show model-level validation error (CIDR) clearly -->
-          {% if ip_form.ip_or_cidr.errors %}
+          {% if ip_form.non_field_errors %}
           <div class="alert alert-danger mt-2 py-2 small d-flex align-items-center gap-2">
             ⚠️
             <div>
-              <strong>Invalid IP / CIDR format.</strong>
-              Use plain addresses (e.g. <code>192.168.1.1</code>) or CIDR notation (e.g. <code>10.0.0.0/24</code>).
+              {% for e in ip_form.non_field_errors %}{{ e }}{% endfor %}
             </div>
           </div>
           {% endif %}
@@ -418,7 +421,7 @@
          data-bs-toggle="collapse" data-bs-target="#collapseAuditLogs"
          aria-expanded="true"
          id="header-audit-logs">
-      <h6 class="fw-bold mb-0">📋 Access Audit Logs (Recent {{ access_logs|length }})</h6>
+      <h6 class="fw-bold mb-0">📋 Access Audit Logs (Recent {{ access_logs|length|default:0 }})</h6>
       <span class="chevron text-muted">▼</span>
     </div>
 
@@ -439,7 +442,7 @@
             {% for log in access_logs %}
             <tr>
               <td class="ps-3">
-                {% if log.status == 'PASSED' %}
+                {% if log.status|upper == 'PASSED' %}
                   <span class="badge bg-success">PASSED</span>
                 {% else %}
                   <span class="badge bg-danger">BLOCKED</span>
@@ -476,8 +479,8 @@
         <p class="mb-0">
           Permanently delete <strong>{{ client.name }}</strong>?<br>
           <span class="text-danger small">
-            All contacts ({{ contacts.count }}), domains ({{ domains.count }}),
-            and IPs ({{ ips.count }}) will be removed.
+            All contacts ({{ contacts.count|default:0 }}), domains ({{ domains.count|default:0 }}),
+            and IPs ({{ ips.count|default:0 }}) will be removed.
           </span>
         </p>
       </div>

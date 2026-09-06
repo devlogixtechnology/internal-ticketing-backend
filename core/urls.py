@@ -25,6 +25,7 @@ urlpatterns = [
     path('tickets/', include('apps.tickets.urls')),
     path('notifications/', include('apps.notifications.urls')),
     path('dashboard/clients/', include('apps.clients.urls')),
+    
 ]
 
 if settings.DEBUG:

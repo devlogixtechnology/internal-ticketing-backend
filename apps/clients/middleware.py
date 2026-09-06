@@ -26,6 +26,7 @@ DEFAULT_EXEMPT_PATHS = [
     "/admin/",
     "/static/",
     "/media/",
+    "/api/admin/clients/onboard/",
 ]
 
 

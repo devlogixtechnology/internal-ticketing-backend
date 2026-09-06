@@ -130,3 +130,34 @@ class WhitelistedIPSerializer(serializers.ModelSerializer):
                 f'"{value}" is not a valid IP address or CIDR range. '
                 "Accepted formats: 192.168.1.1  ·  10.0.0.0/24  ·  2001:db8::/32"
             )
+class ClientOnboardingSerializer(serializers.Serializer):
+    """
+    Serializer for atomic client onboarding process.
+    Accepts client data, primary contact details, domain/IP whitelist, and sends welcome email.
+    """
+    # Client Fields
+    client_name = serializers.CharField(max_length=255)
+    code = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    enforce_whitelisting = serializers.BooleanField(default=False)
+
+    # Contact Fields
+    contact_name = serializers.CharField(max_length=255)
+    contact_email = serializers.EmailField()
+    contact_phone = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    designation = serializers.CharField(max_length=100, required=False, allow_blank=True)
+
+    # Whitelist Fields (Optional)
+    domain_name = serializers.CharField(required=False, allow_blank=True)
+    ip_or_cidr = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_domain_name(self, value):
+        if value:
+            domain_serializer = WhitelistedDomainSerializer()
+            return domain_serializer.validate_domain_name(value)
+        return value
+
+    def validate_ip_or_cidr(self, value):
+        if value:
+            ip_serializer = WhitelistedIPSerializer()
+            return ip_serializer.validate_ip_or_cidr(value)
+        return value
