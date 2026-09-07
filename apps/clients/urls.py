@@ -17,5 +17,6 @@ urlpatterns = [
     path("<int:pk>/domains/<int:dpk>/delete/",            views.domain_delete, name="domain_delete"),
     path("<int:pk>/ips/add/",                             views.ip_add,    name="ip_add"),
     path("<int:pk>/ips/<int:ipk>/delete/",                views.ip_delete, name="ip_delete"),
-   path('api/admin/onboard/', ClientOnboardAPIView.as_view(), name='client-onboard-api'),
+    path('api/admin/onboard/', ClientOnboardAPIView.as_view(), name='client-onboard-api'),
+    path('api/admin/onboard/', ClientOnboardAPIView.as_view(), name='client-onboard'),
 ]

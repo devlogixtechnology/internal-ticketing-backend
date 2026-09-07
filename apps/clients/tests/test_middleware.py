@@ -326,3 +326,82 @@ class TenantWhitelistMiddlewareTestCase(TestCase):
         )
         resp2 = self.middleware(req2)
         self.assertEqual(resp2.status_code, 403)
+
+    def test_explicit_client_is_used_before_headers(self):
+        """An upstream middleware client is authoritative for resolution."""
+        other_client = Client.objects.create(name="Other Corporation", code="other")
+        request = self.factory.get(
+            "/tickets/",
+            HTTP_X_CLIENT_CODE="other",
+            REMOTE_ADDR="198.51.100.20",
+        )
+        request.client = self.client_a
+
+        self.assertIs(self.middleware.resolve_client(request), self.client_a)
+
+    def test_alternate_client_headers_and_invalid_id_fall_through(self):
+        """Supported aliases resolve clients and invalid IDs do not raise."""
+        request = self.factory.get("/tickets/", HTTP_X_TENANT_CODE="ACME")
+        self.assertEqual(self.middleware.resolve_client(request), self.client_a)
+
+        request = self.factory.get("/tickets/", HTTP_X_TENANT_ID="not-an-integer")
+        self.assertIsNone(self.middleware.resolve_client(request))
+
+    def test_domain_falls_back_to_client_code(self):
+        """A bare request domain can resolve an active client code."""
+        request = self.factory.get("/tickets/", HTTP_ORIGIN="https://ACME")
+        self.assertEqual(self.middleware.resolve_client(request, domain="acme"), self.client_a)
+
+    def test_invalid_stored_cidr_is_skipped(self):
+        """A legacy malformed whitelist entry cannot break request handling."""
+        WhitelistedIP.objects.create(
+            client=self.client_a,
+            ip_or_cidr="10.0.0.0/24",
+        )
+        WhitelistedIP.objects.filter(client=self.client_a).update(ip_or_cidr="not-a-network")
+
+        request = self.factory.get("/tickets/", REMOTE_ADDR="10.0.0.5")
+        response = self.middleware(request)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_invalid_and_empty_header_values_are_safe(self):
+        """Blank headers and malformed URL/IP values return None cleanly."""
+        request = self.factory.get(
+            "/tickets/",
+            HTTP_ORIGIN="   ",
+            HTTP_REFERER="   ",
+            HTTP_X_FORWARDED_FOR=" ,  ",
+            REMOTE_ADDR="   ",
+        )
+
+        self.assertIsNone(self.middleware.extract_domain(request))
+        self.assertIsNone(self.middleware.extract_client_ip(request))
+        self.assertIsNone(self.middleware._clean_ip_for_log("invalid"))
+        self.assertIsNone(self.middleware._match_ip("invalid"))
+
+    def test_conflicting_domain_and_ip_belongs_to_same_resolved_client(self):
+        """A resolved client prevents a different domain/IP tenant from passing."""
+        other_client = Client.objects.create(name="Other Corporation", code="other")
+        WhitelistedDomain.objects.create(client=other_client, domain_name="other.com")
+        WhitelistedIP.objects.create(client=self.client_a, ip_or_cidr="10.0.0.0/24")
+
+        request = self.factory.get(
+            "/tickets/",
+            HTTP_ORIGIN="https://other.com",
+            REMOTE_ADDR="10.0.0.5",
+            HTTP_X_CLIENT_CODE="acme",
+        )
+        response = self.middleware(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.client, self.client_a)
+
+    @override_settings(TENANT_WHITELIST_EXEMPT_PATHS=["/public/"])
+    def test_custom_exempt_paths_replace_defaults(self):
+        """Configured exempt paths are honored and do not create audit logs."""
+        request = self.factory.get("/public/status/", REMOTE_ADDR="invalid")
+        response = self.middleware(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(request.client)
