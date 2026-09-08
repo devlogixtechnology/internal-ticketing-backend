@@ -64,6 +64,8 @@ INSTALLED_APPS = [
     'apps.tickets',
     'apps.notifications',
     'apps.clients',
+
+    'drf_spectacular',
 ]
 
 # Custom User Model
@@ -132,8 +134,10 @@ DATABASES = {
     }
 }
 
-# settings.py
+
+# REST Framework Combined Settings
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle'
@@ -141,8 +145,15 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/day',
         'user': '1000/day',
-        'onboarding': '10/minute',  # <--- Yeh line task BE6 ke liye lazmi hai
+        'onboarding': '10/minute',  
     }
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Internal Ticketing API',
+    'DESCRIPTION': 'API documentation for Auth, Onboarding, and Multi-tenant services.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

@@ -22,7 +22,8 @@ from django.utils import timezone
 from django.contrib.auth import login
 from django.contrib.auth import get_user_model
 from apps.accounts.models import MagicLinkToken
-get_user_model()
+
+User = get_user_model()
 
 
 
