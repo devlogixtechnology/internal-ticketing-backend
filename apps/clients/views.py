@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from .models import Client, WhitelistedDomain, WhitelistedIP, WhitelistedEmergencyEmail
 
 from .forms import (
     ClientContactForm,
@@ -21,9 +22,17 @@ from .forms import (
 from .models import Client, ClientContact, WhitelistedDomain, WhitelistedIP
 
 
-# ---------------------------------------------------------------------------
-# Permission helper
-# ---------------------------------------------------------------------------
+from rest_framework import generics, permissions
+from .models import WhitelistedEmergencyEmail
+from .serializers import WhitelistedEmergencyEmailSerializer
+
+class WhitelistedEmergencyEmailListCreateView(generics.ListCreateAPIView):
+    queryset = WhitelistedEmergencyEmail.objects.all()
+    serializer_class = WhitelistedEmergencyEmailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(added_by=self.request.user)
 
 def _require_admin(user):
     """Return True if the user is an ADMIN or superuser."""
@@ -37,10 +46,6 @@ def _forbidden():
     )
 
 
-# ---------------------------------------------------------------------------
-# Client List  /dashboard/clients/
-# ---------------------------------------------------------------------------
-
 @login_required
 def client_list(request):
     if not _require_admin(request.user):
@@ -48,17 +53,20 @@ def client_list(request):
 
     clients = (
         Client.objects
-        .prefetch_related("contacts", "whitelisted_domains", "whitelisted_ips")
+        .prefetch_related("contacts", "whitelisted_domains", "whitelisted_ips", "whitelisted_emergency_emails")
         .order_by("name")
     )
 
+    whitelisted_emails = WhitelistedEmergencyEmail.objects.select_related("client", "added_by").all()
+
     context = {
-        "clients":        clients,
-        "total_clients":  clients.count(),
+        "clients": clients,
+        "total_clients": clients.count(),
         "active_clients": clients.filter(is_active=True).count(),
-        "total_domains":  WhitelistedDomain.objects.count(),
-        "total_ips":      WhitelistedIP.objects.count(),
-        "page_title":     "Tenant & Whitelist Management",
+        "total_domains": WhitelistedDomain.objects.count(),
+        "total_ips": WhitelistedIP.objects.count(),
+        "whitelisted_emails": whitelisted_emails,
+        "page_title": "Tenant & Whitelist Management",
     }
     return render(request, "clients/client_list.html", context)
 

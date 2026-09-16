@@ -14,10 +14,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
 from rest_framework.parsers import MultiPartParser, FormParser
-
+from apps.clients.models import WhitelistedEmergencyEmail, Client
 from apps.notifications.models import Notification
 from apps.accounts.models import CustomUser
 from .models import Ticket, TicketHistory, Category, TicketAttachment, ServerHealthLog
+from .tasks import send_ticket_assigned_email, send_status_update_email  # Celery Tasks
+
+User = get_user_model()
 from .serializers import (
     TicketSerializer, AssignTicketSerializer, ChangeStatusSerializer, 
     CategorySerializer, TicketAttachmentSerializer
@@ -295,9 +298,7 @@ def server_health_dashboard(request):
     }
     return render(request, 'tickets/server_health.html', context)
 
-from .tasks import send_ticket_assigned_email, send_status_update_email  # Celery Tasks
 
-User = get_user_model()
 
 
 @login_required
@@ -306,13 +307,36 @@ def dashboard(request):
     role = getattr(user, 'role', 'EMPLOYEE')
 
     # -------------------------------------------------------------
-    # 1. POST ACTIONS (Approval, Rejection, Assignment, Status Update)
+    # 1. POST ACTIONS (Approval, Rejection, Assignment, Status Update, Email Whitelist)
     # -------------------------------------------------------------
     if request.method == 'POST':
         ticket_id = request.POST.get('ticket_id')
 
-        # Update User Role (Admin only)
-        if 'update_user_role' in request.POST and (role == 'ADMIN' or user.is_superuser):
+        # --- Emergency Email Whitelist Actions (Admin Only) ---
+        if 'add_emergency_email' in request.POST and (role == 'ADMIN' or user.is_superuser):
+            client_id = request.POST.get('client_id')
+            email = request.POST.get('email')
+            purpose = request.POST.get('purpose')
+
+            client_obj = get_object_or_404(Client, id=client_id)
+            WhitelistedEmergencyEmail.objects.create(
+                client=client_obj,
+                email=email,
+                purpose=purpose,
+                verified=True,
+                added_by=user
+            )
+            messages.success(request, f"Emergency email '{email}' whitelisted successfully!")
+            return redirect('tickets:dashboard')
+
+        elif 'delete_emergency_email' in request.POST and (role == 'ADMIN' or user.is_superuser):
+            email_id = request.POST.get('email_id')
+            WhitelistedEmergencyEmail.objects.filter(id=email_id).delete()
+            messages.success(request, "Whitelisted emergency email deleted successfully!")
+            return redirect('tickets:dashboard')
+
+        # --- Existing User Role Update ---
+        elif 'update_user_role' in request.POST and (role == 'ADMIN' or user.is_superuser):
             target_user_id = request.POST.get('target_user_id')
             new_role = request.POST.get('new_role')
             target_user = get_object_or_404(User, id=target_user_id)
@@ -321,6 +345,7 @@ def dashboard(request):
             messages.success(request, f"User {target_user.username}'s role updated to {new_role}!")
             return redirect('tickets:dashboard')
 
+        # --- Existing Ticket Actions ---
         if ticket_id:
             ticket = get_object_or_404(Ticket, id=ticket_id)
 
@@ -346,26 +371,24 @@ def dashboard(request):
                 )
                 messages.warning(request, f"Ticket #{ticket.id} rejected!")
 
-            # Assign Agent (Admin only + Trigger Celery Email)
+            # Assign Agent
             elif 'assign_agent' in request.POST and (role == 'ADMIN' or user.is_superuser):
                 agent_id = request.POST.get('agent_id')
                 assigned_agent = User.objects.filter(id=agent_id).first() if agent_id else None
                 ticket.assigned_to = assigned_agent
                 ticket.save()
 
-                # Celery Async Email Trigger
                 if assigned_agent and assigned_agent.email:
                     send_ticket_assigned_email.delay(ticket.id, assigned_agent.email)
 
                 messages.success(request, f"Ticket #{ticket.id} assigned successfully!")
 
-            # Update Status (Support/Admin + Trigger Celery Email)
+            # Update Status
             elif 'update_status' in request.POST and (role in ['SUPPORT', 'ADMIN'] or user.is_superuser):
                 new_status = request.POST.get('status')
                 ticket.status = new_status
                 ticket.save()
 
-                # Celery Async Email Trigger
                 send_status_update_email.delay(ticket.id, new_status)
 
                 messages.success(request, f"Ticket #{ticket.id} status updated to {new_status}!")
@@ -378,28 +401,22 @@ def dashboard(request):
     base_queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category', 'client')
 
     if role == 'ADMIN' or user.is_superuser:
-        # Admin: Saw sabhi clients aur systems ke tickets dekhega
         pending_tickets = base_queryset.filter(approval_status='PENDING')
         tickets = base_queryset.filter(approval_status='APPROVED')
         rejected_tickets = base_queryset.filter(approval_status='REJECTED')
 
     elif role == 'SUPPORT':
-        # Support: Apne assigned tickets dekhega
         pending_tickets = Ticket.objects.none()
         tickets = base_queryset.filter(assigned_to=user, approval_status='APPROVED')
         rejected_tickets = Ticket.objects.none()
 
     else:
-        # EMPLOYEE / CLIENT USER (Client Scoping Applied here)
-        # Requirement: "clients only see their own tickets"
         if hasattr(user, 'client') and user.client:
-            # Agar user kisi client organization se linked hai:
             client_tickets = base_queryset.filter(client=user.client)
             pending_tickets = client_tickets.filter(approval_status='PENDING')
             tickets = client_tickets.filter(approval_status='APPROVED')
             rejected_tickets = client_tickets.filter(approval_status='REJECTED')
         else:
-            # Standalone regular user: Sirf apne banaye hue tickets dekhega
             user_tickets = base_queryset.filter(created_by=user)
             pending_tickets = user_tickets.filter(approval_status='PENDING')
             tickets = user_tickets.filter(approval_status='APPROVED')
@@ -414,7 +431,7 @@ def dashboard(request):
         'categories': Category.objects.all(),
         'total_count': tickets.count(),
         'open_count': tickets.filter(status='OPEN').count(),
-        'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),  # Corrected status filter
+        'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),
         'resolved_count': tickets.filter(status='RESOLVED').count(),
         'support_agents': User.objects.filter(role='SUPPORT'),
         'all_employees': User.objects.all().exclude(is_superuser=True),
@@ -424,6 +441,9 @@ def dashboard(request):
             ('RESOLVED', 'Resolved'), 
             ('CLOSED', 'Closed')
         ],
+        # --- Task 1 Context Integration ---
+        'whitelisted_emails': WhitelistedEmergencyEmail.objects.select_related('client', 'added_by').all(),
+        'all_clients': Client.objects.filter(is_active=True),
     }
     return render(request, 'tickets/dashboard.html', context)
 

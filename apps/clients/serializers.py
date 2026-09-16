@@ -16,15 +16,17 @@ import ipaddress
 from rest_framework import serializers
 
 from .models import Client, ClientContact, WhitelistedDomain, WhitelistedIP
+from .models import WhitelistedEmergencyEmail
 
+class WhitelistedEmergencyEmailSerializer(serializers.ModelSerializer):
+    client_name = serializers.ReadOnlyField(source='client.name')
+    added_by_username = serializers.ReadOnlyField(source='added_by.username')
 
-# ---------------------------------------------------------------------------
-# Client
-# ---------------------------------------------------------------------------
+    class Meta:
+        model = WhitelistedEmergencyEmail
+        fields = ['id', 'client', 'client_name', 'email', 'verified', 'purpose', 'added_by_username', 'created_at']
 
 class ClientSerializer(serializers.ModelSerializer):
-    """Full CRUD serializer for the Client (tenant) model."""
-
     class Meta:
         model = Client
         fields = ["id", "name", "code", "is_active", "enforce_whitelisting", "created_at"]
@@ -33,11 +35,6 @@ class ClientSerializer(serializers.ModelSerializer):
             # Allow blank so the model's save() can auto-generate the slug.
             "code": {"required": False, "allow_blank": True},
         }
-
-
-# ---------------------------------------------------------------------------
-# ClientContact
-# ---------------------------------------------------------------------------
 
 class ClientContactSerializer(serializers.ModelSerializer):
     """Full CRUD serializer for ClientContact."""

@@ -1,26 +1,10 @@
-"""
-models.py — apps.clients
-========================
-Tenant / client management and IP/domain whitelisting.
-
-Models
-------
-  Client            : Top-level tenant entity.
-  ClientContact     : Contact persons associated with a Client.
-  WhitelistedDomain : Approved email/web domains for a Client.
-  WhitelistedIP     : Approved IPv4/IPv6 addresses or CIDR ranges for a Client.
-"""
 
 import ipaddress
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
-
-
-# ---------------------------------------------------------------------------
-# Custom validator
-# ---------------------------------------------------------------------------
+from django.conf import settings
 
 def validate_ip_or_cidr(value: str) -> None:
     """
@@ -43,12 +27,6 @@ def validate_ip_or_cidr(value: str) -> None:
             "(e.g. 192.168.1.1 or 10.0.0.0/24).",
             params={"value": value},
         )
-
-
-# ---------------------------------------------------------------------------
-# Client
-# ---------------------------------------------------------------------------
-
 class Client(models.Model):
     """Top-level tenant / client company."""
 
@@ -75,7 +53,7 @@ class Client(models.Model):
         verbose_name = "Client"
         verbose_name_plural = "Clients"
 
-    # ------------------------------------------------------------------
+   
     def save(self, *args, **kwargs):
         """Auto-generate a slug-style code from the name when not supplied."""
         if not self.code:
@@ -84,11 +62,6 @@ class Client(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.code})"
-
-
-# ---------------------------------------------------------------------------
-# ClientContact
-# ---------------------------------------------------------------------------
 
 class ClientContact(models.Model):
     """A point-of-contact person belonging to a Client."""
@@ -112,12 +85,7 @@ class ClientContact(models.Model):
         return f"{self.name} <{self.email}>"
 
 
-# ---------------------------------------------------------------------------
-# WhitelistedDomain
-# ---------------------------------------------------------------------------
-
 class WhitelistedDomain(models.Model):
-    """An approved email / web domain for a Client."""
 
     client = models.ForeignKey(
         Client,
@@ -218,3 +186,35 @@ class AccessAttemptLog(models.Model):
     def __str__(self) -> str:
         client_code = self.client.code if self.client else "Unknown"
         return f"[{self.status}] {self.ip_address or self.domain} -> {self.path} ({client_code})"
+
+
+
+class WhitelistedEmergencyEmail(models.Model):
+    client = models.ForeignKey(
+        'clients.Client',
+        on_delete=models.CASCADE,
+        related_name="whitelisted_emergency_emails",
+    )
+    email = models.EmailField(unique=True)
+    verified = models.BooleanField(default=False)
+    purpose = models.CharField(
+        max_length=255,
+        help_text='Purpose, e.g. "VPS Down / VPN Down"',
+    )
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="added_emergency_emails",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Whitelisted Emergency Email"
+        verbose_name_plural = "Whitelisted Emergency Emails"
+
+    def __str__(self) -> str:
+        status = "✓" if self.verified else "✗"
+        return f"{status} {self.email} ({self.purpose}) — {self.client.code}"

@@ -31,11 +31,16 @@
   <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
       <h2 class="fw-bold mb-0">🏢 Tenant &amp; Whitelist Management</h2>
-      <p class="text-muted small mb-0">Manage client tenants, contacts, whitelisted domains and IPs</p>
+      <p class="text-muted small mb-0">Manage client tenants, contacts, whitelisted domains, IPs, and emergency emails</p>
     </div>
-    <a href="{% url 'clients:create' %}" class="btn btn-teal fw-semibold shadow-sm" id="btn-add-client">
-      + Add New Client
-    </a>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-danger fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#addEmergencyEmailModal">
+        🚨 Whitelist Emergency Email
+      </button>
+      <a href="{% url 'clients:create' %}" class="btn btn-teal fw-semibold shadow-sm" id="btn-add-client">
+        + Add New Client
+      </a>
+    </div>
   </div>
 
   <!-- Summary Cards -->
@@ -58,16 +63,17 @@
         <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_domains|default:0 }}</h2>
       </div>
     </div>
+    <!-- Task 1 Integration: Emergency Email Stat Card -->
     <div class="col-6 col-md-3">
-      <div class="card stat-card p-3 shadow-sm border-start border-4 border-warning">
-        <span class="section-header">Whitelisted IPs</span>
-        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_ips|default:0 }}</h2>
+      <div class="card stat-card p-3 shadow-sm border-start border-4 border-danger">
+        <span class="section-header">Emergency Emails</span>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ whitelisted_emails.count|default:0 }}</h2>
       </div>
     </div>
   </div>
 
   <!-- Clients Table -->
-  <div class="card shadow-sm border-0">
+  <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
       <h5 class="fw-bold mb-0">👥 All Clients</h5>
       <span class="badge bg-light text-dark border">Admin Control</span>
@@ -84,7 +90,7 @@
               <th>Status</th>
               <th class="text-center">Contacts</th>
               <th class="text-center">Domains</th>
-              <th class="text-center">IPs</th>
+              <th class="text-center">Emergency Emails</th>
               <th>Created</th>
               <th class="text-end pe-4">Actions</th>
             </tr>
@@ -112,8 +118,9 @@
               <td class="text-center">
                 <span class="badge bg-info text-dark rounded-pill">{{ client.whitelisted_domains.count }}</span>
               </td>
+              <!-- Emergency Emails count per client -->
               <td class="text-center">
-                <span class="badge bg-warning text-dark rounded-pill">{{ client.whitelisted_ips.count }}</span>
+                <span class="badge bg-danger rounded-pill">{{ client.whitelisted_emergency_emails.count }}</span>
               </td>
               <td class="text-muted small">{{ client.created_at|date:"d M Y" }}</td>
               <td class="text-end pe-4">
@@ -154,33 +161,122 @@
     </div>
   </div>
 
+  <!-- ── Task 1: Emergency Email Whitelist Table ── -->
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+      <h5 class="fw-bold mb-0 text-danger">🚨 Whitelisted Emergency Emails</h5>
+      <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" data-bs-toggle="modal" data-bs-target="#addEmergencyEmailModal">
+        + Add Email
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4">Email Address</th>
+              <th>Client Tenant</th>
+              <th>Purpose / Tag</th>
+              <th>Status</th>
+              <th>Added By</th>
+              <th class="text-end pe-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in whitelisted_emails %}
+            <tr>
+              <td class="ps-4 fw-semibold text-dark">{{ item.email }}</td>
+              <td><span class="badge bg-light text-dark border">{{ item.client.name }}</span></td>
+              <td class="text-muted">{{ item.purpose }}</td>
+              <td>
+                {% if item.verified %}
+                  <span class="badge bg-success">Verified</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark">Pending</span>
+                {% endif %}
+              </td>
+              <td class="text-muted">{{ item.added_by.username|default:"System" }}</td>
+              <td class="text-end pe-4">
+                <form method="POST" action="{% url 'tickets:dashboard' %}" class="d-inline" onsubmit="return confirm('Delete this whitelisted email?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="delete_emergency_email" value="1">
+                  <input type="hidden" name="email_id" value="{{ item.id }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger action-btn">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="6" class="text-center py-4 text-muted">No emergency emails whitelisted yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /container-fluid -->
 
-<!-- Delete Confirmation Modals -->
-{% for client in clients %}
-<div class="modal fade" id="deleteModal-{{ client.pk }}" tabindex="-1"
-     aria-labelledby="deleteModalLabel-{{ client.pk }}" aria-hidden="true">
+<!-- Modal: Add New Emergency Email -->
+<div class="modal fade" id="addEmergencyEmailModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
       <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title" id="deleteModalLabel-{{ client.pk }}">⚠️ Delete Client</h5>
+        <h5 class="modal-title fw-bold">🚨 Add Whitelisted Emergency Email</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{% url 'tickets:dashboard' %}">
+        {% csrf_token %}
+        <input type="hidden" name="add_emergency_email" value="1">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Client Tenant</label>
+            <select name="client_id" class="form-select" required>
+              <option value="" selected disabled>Select Client...</option>
+              {% for client in clients %}
+                <option value="{{ client.id }}">{{ client.name }} ({{ client.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Emergency Email Address</label>
+            <input type="email" name="email" class="form-control" placeholder="alert@client.com" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Purpose / Tag</label>
+            <input type="text" name="purpose" class="form-control" placeholder='e.g. "VPS Down / Critical Server Alert"' required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger font-semibold">Add Whitelisted Email</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Client Modals -->
+{% for client in clients %}
+<div class="modal fade" id="deleteModal-{{ client.pk }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">⚠️ Delete Client</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p class="mb-0">
           Are you sure you want to delete <strong>{{ client.name }}</strong>?<br>
-          <span class="text-danger small">
-            This will permanently remove all associated contacts, whitelisted domains, and IPs.
-          </span>
+          <span class="text-danger small">This will permanently remove all associated contacts and whitelists.</span>
         </p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <form method="post" action="{% url 'clients:delete' client.pk %}" class="d-inline">
           {% csrf_token %}
-          <button type="submit" class="btn btn-danger" id="confirm-delete-{{ client.pk }}">
-            Yes, Delete
-          </button>
+          <button type="submit" class="btn btn-danger">Yes, Delete</button>
         </form>
       </div>
     </div>
