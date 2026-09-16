@@ -224,3 +224,13 @@ CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
         'protocol': 2
     }
 }
+
+
+
+# --- Dedicated Support Mailbox Settings (IMAP) ---
+IMAP_SERVER = os.getenv('IMAP_SERVER', 'imap.gmail.com')
+IMAP_PORT = int(os.getenv('IMAP_PORT', 993))
+IMAP_USE_SSL = os.getenv('IMAP_USE_SSL', 'True').lower() in ['true', '1', 't']
+IMAP_USERNAME = os.getenv('IMAP_USERNAME', 'laibashafiq634@gmail.com')  
+IMAP_PASSWORD = os.getenv('IMAP_PASSWORD', 'vssi arwz rmis pebk')  
+IMAP_FOLDER = os.getenv('IMAP_FOLDER', 'INBOX')
