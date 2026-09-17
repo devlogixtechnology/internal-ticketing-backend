@@ -395,44 +395,38 @@ def dashboard(request):
 
         return redirect('tickets:dashboard')
 
-    # -------------------------------------------------------------
-    # 2. GET QUERYSETS (Role & Client Scoping)
-    # -------------------------------------------------------------
     base_queryset = Ticket.objects.select_related('created_by', 'assigned_to', 'category', 'client')
 
     if role == 'ADMIN' or user.is_superuser:
-        pending_tickets = base_queryset.filter(approval_status='PENDING')
-        tickets = base_queryset.filter(approval_status='APPROVED')
-        rejected_tickets = base_queryset.filter(approval_status='REJECTED')
-
+        all_scoped_tickets = base_queryset.all()
     elif role == 'SUPPORT':
-        pending_tickets = Ticket.objects.none()
-        tickets = base_queryset.filter(assigned_to=user, approval_status='APPROVED')
-        rejected_tickets = Ticket.objects.none()
-
+        all_scoped_tickets = base_queryset.filter(assigned_to=user)
     else:
         if hasattr(user, 'client') and user.client:
-            client_tickets = base_queryset.filter(client=user.client)
-            pending_tickets = client_tickets.filter(approval_status='PENDING')
-            tickets = client_tickets.filter(approval_status='APPROVED')
-            rejected_tickets = client_tickets.filter(approval_status='REJECTED')
+            all_scoped_tickets = base_queryset.filter(client=user.client)
         else:
-            user_tickets = base_queryset.filter(created_by=user)
-            pending_tickets = user_tickets.filter(approval_status='PENDING')
-            tickets = user_tickets.filter(approval_status='APPROVED')
-            rejected_tickets = user_tickets.filter(approval_status='REJECTED')
+            all_scoped_tickets = base_queryset.filter(created_by=user)
 
-    # Context Data Rendering
+    # Separate by approval status for list tables
+    pending_tickets = all_scoped_tickets.filter(approval_status='PENDING')
+    tickets = all_scoped_tickets.filter(approval_status='APPROVED')
+    rejected_tickets = all_scoped_tickets.filter(approval_status='REJECTED')
+
+    # Metrics Calculations (Includes both Approved & All Scoped logic correctly)
     context = {
         'tickets': tickets,
         'pending_tickets': pending_tickets,           
         'rejected_tickets': rejected_tickets,          
         'user_role': role,
         'categories': Category.objects.all(),
-        'total_count': tickets.count(),
-        'open_count': tickets.filter(status='OPEN').count(),
-        'in_progress_count': tickets.filter(status='IN_PROGRESS').count(),
-        'resolved_count': tickets.filter(status='RESOLVED').count(),
+        
+        # --- FIXED COUNTS ---
+        'total_count': all_scoped_tickets.count(),  # Total tickets across system scope
+        'open_count': all_scoped_tickets.filter(status__iexact='OPEN').count(),
+        'in_progress_count': all_scoped_tickets.filter(status__iexact='IN_PROGRESS').count(),
+        # Combines RESOLVED and CLOSED safely with case insensitivity
+        'resolved_count': all_scoped_tickets.filter(status__in=['RESOLVED', 'CLOSED', 'resolved', 'closed']).count(),
+        
         'support_agents': User.objects.filter(role='SUPPORT'),
         'all_employees': User.objects.all().exclude(is_superuser=True),
         'status_choices': Ticket.Status.choices if hasattr(Ticket, 'Status') else [
@@ -441,12 +435,10 @@ def dashboard(request):
             ('RESOLVED', 'Resolved'), 
             ('CLOSED', 'Closed')
         ],
-        # --- Task 1 Context Integration ---
         'whitelisted_emails': WhitelistedEmergencyEmail.objects.select_related('client', 'added_by').all(),
         'all_clients': Client.objects.filter(is_active=True),
     }
     return render(request, 'tickets/dashboard.html', context)
-
 @login_required
 def ticket_detail(request, ticket_id):
     ticket = get_object_or_404(_visible_tickets_for_user(request.user), id=ticket_id)

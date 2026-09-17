@@ -394,261 +394,222 @@
     </div>
 </div>
 
-<!-- ================= MODALS SECTION ================= -->
+
+
+<!-- ========================================== -->
+<!-- TASK 3 ACTION MODALS                       -->
+<!-- ========================================== -->
 
 <!-- 1. CREATE TICKET MODAL -->
-{% if user_role == 'EMPLOYEE' or user_role == 'ADMIN' or user.is_superuser %}
 <div class="modal fade" id="createTicketModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header">
+            <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title fw-bold">Create New Ticket</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="createTicketForm" onsubmit="createTicketDRF(event)" enctype="multipart/form-data">
+            <form onsubmit="createTicketDRF(event)">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Ticket Subject / Title</label>
-                        <input type="text" id="ticketTitle" class="form-control" placeholder="Brief summary of the issue" required>
+                        <label for="ticketTitle" class="form-label fw-semibold">Title</label>
+                        <input type="text" class="form-control" id="ticketTitle" name="title" required placeholder="Enter ticket title">
                     </div>
-                    
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Category</label>
-                        <select id="ticketCategory" class="form-select" required>
-                            <option value="">Select Category...</option>
-                            {% for category in categories %}
-                                <option value="{{ category.id }}">{{ category.name }}</option>
+                        <label for="ticketCategory" class="form-label fw-semibold">Category</label>
+                        <select class="form-select" id="ticketCategory" name="category" required>
+                            <option value="" selected disabled>Select Category</option>
+                            {% for cat in categories %}
+                                <option value="{{ cat.id }}">{{ cat.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Priority Level</label>
-                        <select id="ticketPriority" class="form-select">
+                        <label for="ticketPriority" class="form-label fw-semibold">Priority</label>
+                        <select class="form-select border-danger" id="ticketPriority" name="priority" required>
                             <option value="LOW">Low</option>
                             <option value="MEDIUM" selected>Medium</option>
                             <option value="HIGH">High</option>
-                            <option value="CRITICAL">Critical</option>
+                            <option value="CRITICAL" style="background-color: #dc3545; color: white; font-weight: bold;">
+                                🚨 CRITICAL / EMERGENCY
+                            </option>
                         </select>
                     </div>
-
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Detailed Description</label>
-                        <textarea id="ticketDescription" class="form-control" rows="4" placeholder="Explain the problem in detail..." required></textarea>
+                        <label for="ticketDescription" class="form-label fw-semibold">Description</label>
+                        <textarea class="form-control" id="ticketDescription" name="description" rows="3" required placeholder="Describe the issue..."></textarea>
                     </div>
-
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Attachment (Optional)</label>
-                        <input type="file" id="ticketAttachment" class="form-control" accept=".jpg,.jpeg,.png,.pdf,.txt,.log">
-                        <div class="form-text">Allowed: JPG, PNG, PDF, TXT, LOG — Max size 5MB</div>
+                        <label for="ticketAttachment" class="form-label fw-semibold">Attachments (Optional)</label>
+                        <input type="file" class="form-control" id="ticketAttachment" name="attachments" multiple>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold">Submit Ticket</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Ticket</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-{% endif %}
-
-<!-- 2. ADD CATEGORY MODAL -->
-{% if user_role == 'ADMIN' or user.is_superuser %}
+<!-- 2. CREATE CATEGORY MODAL -->
 <div class="modal fade" id="createCategoryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header">
+            <div class="modal-header bg-dark text-white">
                 <h5 class="modal-title fw-bold">Add New Category</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="createCategoryForm" onsubmit="createCategoryDRF(event)">
+            <form onsubmit="createCategoryDRF(event)">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Category Name</label>
-                        <input type="text" id="newCategoryName" class="form-control" placeholder="e.g. Database Error, Hardware Failure" required>
+                        <label for="newCategoryName" class="form-label fw-semibold">Category Name</label>
+                        <input type="text" class="form-control" id="newCategoryName" name="name" required placeholder="e.g. Network, Hardware, Software">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold">Save Category</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-dark">Save Category</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-{% endif %}
 
 <!-- 3. ASSIGN TICKET MODAL -->
-{% if user_role == 'ADMIN' or user.is_superuser %}
 <div class="modal fade" id="assignTicketModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header">
+            <div class="modal-header bg-info text-white">
                 <h5 class="modal-title fw-bold">Assign Ticket</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="assignTicketForm" method="POST" action="{% url 'tickets:dashboard' %}" onsubmit="assignTicketDRF(event)">
-                {% csrf_token %}
+            <form onsubmit="assignTicketDRF(event)">
                 <div class="modal-body">
                     <input type="hidden" id="assignTicketId" name="ticket_id">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Select Support Agent / Employee</label>
-                        <select id="assignAgentId" name="agent_id" class="form-select" required>
-    <option value="">Choose User...</option>
-    {% for agent in support_agents %}
-        <option value="{{ agent.id }}">
-            {{ agent.username }} ({{ agent.role|default:"EMPLOYEE" }})
-        </option>
-    {% endfor %}
-</select>
-                        <div class="form-text">Assigning an Employee will auto-promote them to Support Agent.</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" name="assign_agent" class="btn btn-primary fw-bold">Confirm Assignment</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- 4. STATUS CHANGE MODAL -->
-<div class="modal fade" id="statusTicketModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold">Change Ticket Status</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="statusTicketForm" onsubmit="changeStatusDRF(event)">
-                <div class="modal-body">
-                    <input type="hidden" id="statusTicketId">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Target Status</label>
-                        <select id="newStatusValue" class="form-select" required>
-                            {% for code, label in status_choices %}
-                                <option value="{{ code }}">{{ label }}</option>
+                        <label for="assignedToUser" class="form-label fw-semibold">Assign To</label>
+                        <select class="form-select" id="assignedToUser" name="assigned_to" required>
+                            <option value="" selected disabled>Select Agent / User</option>
+                            {% for agent in agents %}
+                                <option value="{{ agent.id }}">{{ agent.username }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Remarks / Transition Reason</label>
-                        <textarea id="statusRemarks" class="form-control" rows="3" placeholder="Provide reason or progress update..."></textarea>
-                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold">Update Status</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-info text-white">Assign</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-
-<!-- 5. TICKET DETAIL MODALS (Approved) -->
-{% for ticket in tickets %}
-<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+<!-- Emergency Whitelist Section -->
+<div class="card my-4">
+    <div class="card-header d-flex justify-between align-items-center">
+        <h5>Emergency Whitelisted Emails</h5>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addEmergencyEmailModal">+ Add Whitelisted Email</button>
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Purpose</th>
+                    <th>Verified</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in whitelisted_emails %}
+                <tr>
+                    <td>{{ item.email }}</td>
+                    <td>{{ item.purpose }}</td>
+                    <td><span class="badge bg-success">Verified</span></td>
+                    <td>
+                        <form method="POST" style="display:inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_emergency_email">
+                            <input type="hidden" name="email_id" value="{{ item.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-center">No whitelisted emergency emails found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- 4. CHANGE STATUS MODAL -->
+<div class="modal fade" id="statusTicketModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header">
-                <div>
-                    <span class="text-muted small">Ticket #{{ ticket.id }}</span>
-                    <h5 class="modal-title fw-bold mb-0">{{ ticket.title }}</h5>
-                </div>
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold">Update Ticket Status</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <p><strong>Description:</strong><br>{{ ticket.description }}</p>
-                <hr>
-                <div class="row">
-                    <div class="col-6"><strong>Category:</strong> {{ ticket.category.name }}</div>
-                    <div class="col-6"><strong>Priority:</strong> {{ ticket.priority }}</div>
-                    <div class="col-6 mt-2"><strong>Status:</strong> {{ ticket.get_status_display }}</div>
-                    <div class="col-6 mt-2"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
-                    <div class="col-6 mt-2"><strong>Assigned To:</strong> {{ ticket.assigned_to.username|default:"Unassigned" }}</div>
-                    <div class="col-6 mt-2"><strong>Created At:</strong> {{ ticket.created_at|date:"d M Y, h:i A" }}</div>
+            <form onsubmit="changeStatusDRF(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="statusTicketId" name="ticket_id">
+                    <div class="mb-3">
+                        <label for="newStatusValue" class="form-label fw-semibold">Status</label>
+                        <select class="form-select" id="newStatusValue" name="status" required>
+                            <option value="OPEN">Open</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="RESOLVED">Resolved</option>
+                            <option value="CLOSED">Closed</option>
+                            <option value="REJECTED">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="statusRemarks" class="form-label fw-semibold">Remarks / Comments</label>
+                        <textarea class="form-control" id="statusRemarks" name="remarks" rows="3" placeholder="Add status update remarks..."></textarea>
+                    </div>
                 </div>
-                <hr>
-                <strong>Attachments:</strong><br>
-                {% for attachment in ticket.attachments.all %}
-                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
-                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
-                        <span aria-hidden="true">📎</span>
-                        <span class="text-primary">{{ attachment.filename }}</span>
-                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
-                    </a>
-                {% empty %}
-                    <p class="text-muted mb-0">No attachments.</p>
-                {% endfor %}
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-            </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Update Status</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
-{% endfor %}
-
-<!-- 6. TICKET DETAIL MODALS (Pending) -->
-{% for ticket in pending_tickets %}
-<div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold">Ticket #{{ ticket.id }} — {{ ticket.title }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p><strong>Description:</strong><br>{{ ticket.description }}</p>
-                <hr>
-                <div class="row">
-                    <div class="col-6"><strong>Category:</strong> {{ ticket.category.name }}</div>
-                    <div class="col-6"><strong>Priority:</strong> {{ ticket.priority }}</div>
-                    <div class="col-6 mt-2"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
-                    <div class="col-6 mt-2"><strong>Created At:</strong> {{ ticket.created_at|date:"d M Y, h:i A" }}</div>
-                </div>
-                <hr>
-                <strong>Attachments:</strong><br>
-                {% for attachment in ticket.attachments.all %}
-                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
-                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
-                        <span aria-hidden="true">📎</span>
-                        <span class="text-primary">{{ attachment.filename }}</span>
-                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
-                    </a>
-                {% empty %}
-                    <p class="text-muted mb-0">No attachments.</p>
-                {% endfor %}
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endfor %}
 
 <!-- 7. TICKET DETAIL MODALS (Rejected) -->
 {% for ticket in rejected_tickets %}
 <div class="modal fade" id="ticketDetailModal{{ ticket.id }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold">Ticket #{{ ticket.id }} — {{ ticket.title }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header bg-danger text-white">
+                <div>
+                    <span class="small opacity-75">Rejected Ticket #{{ ticket.id }}</span>
+                    <h5 class="modal-title fw-bold mb-0 text-white">{{ ticket.title }}</h5>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <p><strong>Description:</strong><br>{{ ticket.description }}</p>
                 <hr>
                 <div class="row">
                     <div class="col-6"><strong>Category:</strong> {{ ticket.category.name }}</div>
-                    <div class="col-6"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
+                    <div class="col-6"><strong>Priority:</strong> {{ ticket.priority }}</div>
+                    <div class="col-6 mt-2"><strong>Created By:</strong> {{ ticket.created_by.username }}</div>
                     <div class="col-6 mt-2"><strong>Created At:</strong> {{ ticket.created_at|date:"d M Y, h:i A" }}</div>
                 </div>
-                <div class="alert alert-danger mt-3 mb-0">This ticket was rejected by Admin.</div>
+                <hr>
+                <strong>Attachments:</strong><br>
+                {% for attachment in ticket.attachments.all %}
+                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener"
+                       class="d-flex align-items-center gap-2 border rounded p-2 mb-2 text-decoration-none">
+                        <span aria-hidden="true">📎</span>
+                        <span class="text-primary">{{ attachment.filename }}</span>
+                        <small class="text-muted ms-auto">{{ attachment.uploaded_at|date:"M j, Y, g:i A" }}</small>
+                    </a>
+                {% empty %}
+                    <p class="text-muted mb-0">No attachments.</p>
+                {% endfor %}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
@@ -658,8 +619,148 @@
 </div>
 {% endfor %}
 
-<!-- ================= JAVASCRIPT FETCH HANDLERS ================= -->
+<!-- ========================================== -->
+<!-- JAVASCRIPT HANDLERS                        -->
+<!-- ========================================== -->
 <script>
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken') || '{{ csrf_token }}';
+
+function openAssignModal(ticketId) {
+    const input = document.getElementById('assignTicketId');
+    if (input) input.value = ticketId;
+    const modalElem = document.getElementById('assignTicketModal');
+    if (modalElem) {
+        const modal = new bootstrap.Modal(modalElem);
+        modal.show();
+    }
+}
+
+function openStatusModal(ticketId, currentStatus) {
+    const ticketInput = document.getElementById('statusTicketId');
+    const statusInput = document.getElementById('newStatusValue');
+    if (ticketInput) ticketInput.value = ticketId;
+    if (statusInput) statusInput.value = currentStatus;
+
+    const modalElem = document.getElementById('statusTicketModal');
+    if (modalElem) {
+        const modal = new bootstrap.Modal(modalElem);
+        modal.show();
+    }
+}
+
+function createTicketDRF(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+
+    fetch('/api/tickets/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken
+        },
+        body: formData
+    })
+    .then(async res => {
+        if (res.ok) { 
+            window.location.reload(); 
+        } else { 
+            const errData = await res.json();
+            alert('Failed to create ticket: ' + JSON.stringify(errData)); 
+        }
+    })
+    .catch(err => console.error('Error creating ticket:', err));
+}
+
+function createCategoryDRF(e) {
+    e.preventDefault();
+    const name = document.getElementById('newCategoryName').value;
+    
+    fetch('/api/categories/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ name: name })
+    })
+    .then(async res => {
+        if (res.ok) { 
+            window.location.reload(); 
+        } else { 
+            const errData = await res.json();
+            alert('Failed to create category: ' + JSON.stringify(errData)); 
+        }
+    })
+    .catch(err => console.error('Error creating category:', err));
+}
+
+function assignTicketDRF(e) {
+    e.preventDefault();
+    const ticketId = document.getElementById('assignTicketId').value;
+    const assignedTo = document.getElementById('assignedToUser').value;
+
+    fetch(`/api/tickets/${ticketId}/assign/`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ assigned_to: assignedTo })
+    })
+    .then(async res => {
+        if (res.ok) { 
+            window.location.reload(); 
+        } else { 
+            const errData = await res.json();
+            alert('Failed to assign ticket: ' + JSON.stringify(errData)); 
+        }
+    })
+    .catch(err => console.error('Error assigning ticket:', err));
+}
+
+function changeStatusDRF(e) {
+    e.preventDefault();
+    const ticketId = document.getElementById('statusTicketId').value;
+    const status = document.getElementById('newStatusValue').value;
+    const remarks = document.getElementById('statusRemarks').value;
+
+    fetch(`/api/tickets/${ticketId}/status/`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ status: status, remarks: remarks })
+    })
+    .then(async res => {
+        if (res.ok) { 
+            window.location.reload(); 
+        } else { 
+            const errData = await res.json();
+            alert('Failed to update status: ' + JSON.stringify(errData)); 
+        }
+    })
+    .catch(err => console.error('Error updating status:', err));
+}
+
+
+
+<!-- ================= JAVASCRIPT FETCH HANDLERS ================= -->
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
