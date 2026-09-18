@@ -5,7 +5,8 @@ from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from .models import Ticket
-
+from celery import shared_task
+from django.core.management import call_command
 logger = logging.getLogger(__name__)
 
 
@@ -88,3 +89,7 @@ def auto_close_resolved_tickets(days=7):
     
     logger.info(f"Auto-closed {count} resolved tickets inactive for {days} days.")
     return f"Auto-closed {count} tickets."
+
+@shared_task
+def run_inbound_email_ingestion():
+    call_command('ingest_inbound_emails')

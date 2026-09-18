@@ -14,6 +14,8 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import environ
 import os
 from pathlib import Path
+# --- Celery Beat Schedule Settings ---
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -203,27 +205,20 @@ MAILERS = {
 }
 # settings.py
 
+# --- Celery Redis Configuration ---
 CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
 CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 
-# Redis connection parameters mein protocol version 2 force karein
-CELERY_REDIS_BACKEND_SETTINGS = {
-    'protocol_version': 2
+# Periodic Beat Schedule
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'ingest-inbound-emails-every-minute': {
+        'task': 'apps.tickets.tasks.run_inbound_email_ingestion',
+        'schedule': 60.0,
+    },
 }
 
-CELERY_BROKER_TRANSPORT_OPTIONS = {
-    'protocol_version': 2,
-    'redis_connect_kwargs': {
-        'protocol': 2
-    }
-}
-
-CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
-    'protocol_version': 2,
-    'redis_connect_kwargs': {
-        'protocol': 2
-    }
-}
 
 
 

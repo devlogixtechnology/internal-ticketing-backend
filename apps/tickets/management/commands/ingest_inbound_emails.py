@@ -2,21 +2,29 @@ import imaplib
 import email
 from email.header import decode_header
 import ssl
+import re
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 
-from apps.tickets.models import Ticket,Category
+from apps.tickets.models import Ticket, Category, TicketAttachment
 from apps.clients.models import WhitelistedEmergencyEmail
 
 User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Ingests unread emails from the dedicated support IMAP mailbox and creates tickets."
+    help = "Ingests unread emails from the dedicated support IMAP mailbox and creates tickets with attachments."
+
+    def clean_html(self, raw_html):
+        """Simple helper to strip basic HTML tags if plain text is missing."""
+        cleanr = re.compile('<.*?>')
+        cleantext = re.sub(cleanr, '', raw_html)
+        return cleantext.strip()
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.NOTICE("Starting inbound email ingestion..."))
+        self.stdout.write(self.style.NOTICE("Starting inbound email ingestion with body & attachment parsing..."))
 
         server = getattr(settings, 'IMAP_SERVER', 'imap.gmail.com')
         port = getattr(settings, 'IMAP_PORT', 993)
@@ -24,7 +32,7 @@ class Command(BaseCommand):
         password = getattr(settings, 'IMAP_PASSWORD', '')
         folder = getattr(settings, 'IMAP_FOLDER', 'INBOX')
 
-        # 1. Resolve or create Default System User for created_by constraint
+        # 1. Resolve or create Default System User
         system_user = User.objects.filter(is_superuser=True).first()
         if not system_user:
             system_user = User.objects.first()
@@ -76,21 +84,60 @@ class Command(BaseCommand):
                         # From parsing
                         from_address = email.utils.parseaddr(msg.get("From"))[1]
 
-                        # Body parsing
-                        body = ""
+                        # Body and Attachments Parsing Variables
+                        body_plain = ""
+                        body_html = ""
+                        attachments_data = []  # List of tuples: (filename, file_content)
+
                         if msg.is_multipart():
                             for part in msg.walk():
+                                # Multipart root container ignore karein
+                                if part.get_content_maintype() == 'multipart':
+                                    continue
+
                                 content_type = part.get_content_type()
-                                content_disposition = str(part.get("Content-Disposition"))
-                                if content_type == "text/plain" and "attachment" not in content_disposition:
+                                content_disposition = str(part.get("Content-Disposition", ""))
+                                filename = part.get_filename()
+
+                                # Decode filename if encoded
+                                if filename:
+                                    filename_decoded, fname_encoding = decode_header(filename)[0]
+                                    if isinstance(filename_decoded, bytes):
+                                        filename = filename_decoded.decode(fname_encoding or "utf-8", errors="ignore")
+
+                                # Check if part is an attachment, inline file, or image
+                                is_attachment = "attachment" in content_disposition or "inline" in content_disposition or filename
+                                is_image = content_type.startswith("image/")
+
+                                if is_attachment or is_image:
                                     payload = part.get_payload(decode=True)
                                     if payload:
-                                        body = payload.decode(errors="ignore")
-                                    break
+                                        # Fallback filename generated agar image ka naam nahi mil raha
+                                        if not filename:
+                                            ext = content_type.split('/')[-1] if '/' in content_type else 'png'
+                                            filename = f"inline_image.{ext}"
+
+                                        attachments_data.append((filename, payload))
+                                
+                                # Extract Body (Plain text preferred, HTML fallback)
+                                elif content_type == "text/plain" and not body_plain:
+                                    payload = part.get_payload(decode=True)
+                                    if payload:
+                                        body_plain = payload.decode(errors="ignore")
+                                elif content_type == "text/html" and not body_html:
+                                    payload = part.get_payload(decode=True)
+                                    if payload:
+                                        body_html = payload.decode(errors="ignore")
                         else:
                             payload = msg.get_payload(decode=True)
                             if payload:
-                                body = payload.decode(errors="ignore")
+                                if msg.get_content_type() == "text/html":
+                                    body_html = payload.decode(errors="ignore")
+                                else:
+                                    body_plain = payload.decode(errors="ignore")
+
+                        # Finalize ticket description body
+                        final_body = body_plain or self.clean_html(body_html) or 'No body content provided.'
 
                         # Emergency check
                         is_whitelisted = False
@@ -108,10 +155,10 @@ class Command(BaseCommand):
                             f"From: {from_address}\n"
                             f"Emergency Whitelisted: {is_whitelisted}\n"
                             f"Purpose: {matched_emergency_entry.purpose if matched_emergency_entry else 'N/A'}\n\n"
-                            f"{body or 'No body content provided.'}"
+                            f"{final_body}"
                         )
 
-                        # Create Ticket passing system_user into created_by
+                        # Create Ticket
                         ticket = Ticket.objects.create(
                             title=ticket_title[:255],
                             description=ticket_desc,
@@ -120,10 +167,22 @@ class Command(BaseCommand):
                             status="OPEN",
                             priority="CRITICAL" if is_whitelisted else "MEDIUM"
                         )
+
+                        # Save extracted Attachments/Inline Images into TicketAttachment Model
+                        saved_attachments_count = 0
+                        for fname, content in attachments_data:
+                            django_file = ContentFile(content, name=fname)
+                            TicketAttachment.objects.create(
+                                ticket=ticket,
+                                file=django_file,
+                                uploaded_by=system_user  # <-- Yeh line yahan majood honi chahiye
+                            )
+                            saved_attachments_count += 1
                         
                         self.stdout.write(
                             self.style.SUCCESS(
-                                f"✓ Created Ticket ID #{ticket.id} for '{from_address}' (Emergency: {is_whitelisted})"
+                                f"✓ Created Ticket ID #{ticket.id} for '{from_address}' "
+                                f"(Emergency: {is_whitelisted}, Attachments Saved: {saved_attachments_count})"
                             )
                         )
 

@@ -22,7 +22,9 @@ urlpatterns = [
     path('api/tickets/<int:ticket_id>/status/', views.change_status_api, name='change_status'),
     path('api/tickets/<int:ticket_id>/attachments/upload/', views.upload_attachment_api, name='upload_attachment'),
     path('api/categories/create/', views.create_category_api, name='create_category'),
-
+    path('emergency-whitelists/', views.emergency_whitelists, name='emergency_whitelists'),
+    path('ticket/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
+    path('active-tickets/', views.active_tickets, name='active_tickets'), # Naya route
     # Include DRF Router URLs
     path('', include(router.urls)),
 ]

@@ -8,7 +8,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.admin.views.decorators import staff_member_required
-
+from django.db.models import Case, When, Value
+from apps.clients.models import WhitelistedEmergencyEmail
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -499,3 +500,35 @@ class TicketViewSet(viewsets.ModelViewSet):
             return queryset.filter(client=user.client)
 
         return queryset.filter(created_by=user)
+
+
+@login_required
+def emergency_whitelists(request):
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add_emergency_email':
+            email = request.POST.get('email')
+            purpose = request.POST.get('purpose')
+            WhitelistedEmergencyEmail.objects.create(email=email, purpose=purpose)
+        elif action == 'delete_emergency_email':
+            email_id = request.POST.get('email_id')
+            WhitelistedEmergencyEmail.objects.filter(id=email_id).delete()
+        return redirect('emergency_whitelists')
+
+    whitelisted_emails = WhitelistedEmergencyEmail.objects.all()
+    return render(request, 'tickets/emergency_whitelists.html', {
+        'whitelisted_emails': whitelisted_emails
+    })
+
+@login_required
+def active_tickets(request):
+    # Status jo active hain
+    active_statuses = ['OPEN', 'IN_PROGRESS']
+    
+    # Critical priority waali tickets ko pehle order karna
+    tickets = Ticket.objects.filter(status__in=active_statuses).order_by(
+        Case(When(priority='CRITICAL', then=Value(0)), default=Value(1)),
+        '-created_at'
+    )
+    
+    return render(request, 'tickets/active_tickets.html', {'tickets': tickets})

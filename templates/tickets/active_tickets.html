@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+
+{% block title %}Active Tickets Workspace{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">🎟️ Active Support & Email Tickets</h2>
+            <p class="text-muted small mb-0">Total {{ tickets|length }} tickets loaded in queue.</p>
+        </div>
+        <a href="{% url 'tickets:dashboard' %}" class="btn btn-outline-secondary fw-semibold">
+            ← Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Active Tickets Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ticket ID</th>
+                            <th>Title & Attachments</th>
+                            <th>Category</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Created By</th>
+                            <th>Assigned To</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in tickets %}
+                        <tr>
+                            <td class="fw-bold">#{{ ticket.id }}</td>
+                            <td class="fw-semibold">
+                                <a href="{% url 'tickets:ticket_detail' ticket.id %}" class="text-dark text-decoration-none">
+                                    {{ ticket.title }}
+                                </a>
+
+                                <!-- Attachment Button Triggering Modal -->
+                                {% if ticket.attachments.count > 0 %}
+                                    <div class="mt-1">
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-info py-0 px-2 text-dark border-info fw-semibold" 
+                                                onclick="openAttachmentsModal('{{ ticket.id }}')">
+                                            📎 Attachments ({{ ticket.attachments.count }})
+                                        </button>
+
+                                        <!-- Hidden JSON for Attachments -->
+                                        <script id="attachments-data-{{ ticket.id }}" type="application/json">
+                                            [
+                                                {% for attachment in ticket.attachments.all %}
+                                                {
+                                                    "filename": "{{ attachment.filename|escapejs }}",
+                                                    "url": "{{ attachment.file.url }}"
+                                                }{% if not forloop.last %},{% endif %}
+                                                {% endfor %}
+                                            ]
+                                        </script>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-light text-dark border">{{ ticket.category.name }}</span></td>
+                            <td>
+                                {% if ticket.priority == 'CRITICAL' or ticket.priority == 'HIGH' %}
+                                    <span class="badge bg-danger">{{ ticket.priority }}</span>
+                                {% elif ticket.priority == 'MEDIUM' %}
+                                    <span class="badge bg-warning text-dark">{{ ticket.priority }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ ticket.priority }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if ticket.status == 'OPEN' %}bg-warning text-dark
+                                    {% elif ticket.status == 'IN_PROGRESS' %}bg-info text-dark
+                                    {% elif ticket.status == 'RESOLVED' %}bg-success
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ ticket.get_status_display|default:ticket.status }}
+                                </span>
+                            </td>
+                            <td><span class="text-muted">{{ ticket.created_by.username }}</span></td>
+                            <td>
+                                {% if ticket.assigned_to %}
+                                    <span class="badge bg-soft-primary text-primary border border-primary">
+                                        {{ ticket.assigned_to.username }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted fst-italic">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{% url 'tickets:ticket_detail' ticket.id %}" class="btn btn-sm btn-outline-dark me-1 fw-semibold">
+                                    View Details
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                No active tickets found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Viewing Attachments -->
+<div class="modal fade" id="attachmentsModal" tabindex="-1" aria-labelledby="attachmentsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light border-0">
+                <h5 class="modal-title fw-bold" id="attachmentsModalLabel">📎 Ticket Attachments</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <ul class="list-group list-group-flush" id="attachmentsList">
+                    <!-- Dynamic Items via JS -->
+                </ul>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary fw-semibold" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openAttachmentsModal(ticketId) {
+    const listContainer = document.getElementById('attachmentsList');
+    const dataScript = document.getElementById(`attachments-data-${ticketId}`);
+    
+    if (!listContainer || !dataScript) return;
+    
+    listContainer.innerHTML = '';
+    const attachments = JSON.parse(dataScript.textContent);
+
+    attachments.forEach(file => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center py-3 px-2';
+        li.innerHTML = `
+            <span class="text-truncate fw-semibold text-dark" style="max-width: 280px;" title="${file.filename}">
+                📄 ${file.filename}
+            </span>
+            <a href="${file.url}" target="_blank" class="btn btn-sm btn-primary fw-bold">
+                View / Download ↗
+            </a>
+        `;
+        listContainer.appendChild(li);
+    });
+
+    const modalElem = document.getElementById('attachmentsModal');
+    if (modalElem) {
+        const modal = new bootstrap.Modal(modalElem);
+        modal.show();
+    }
+}
+</script>
+{% endblock %}
