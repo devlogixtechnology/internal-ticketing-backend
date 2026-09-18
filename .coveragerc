@@ -1,0 +1,11 @@
+[run]
+omit =
+    apps/clients/admin.py
+    apps/clients/apps.py
+    apps/clients/migrations/*
+    apps/clients/tests/*
+    apps/clients/throttling.py
+    apps/clients/views.py
+
+[report]
+fail_under = 90

@@ -10,7 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+
+import environ
+import os
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env(
+    DEBUG=(bool, False)
+)
+
+# .env file load karein
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env('DEBUG')
+DATABASES = {
+    'default': env.db('DATABASE_URL')
+}
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,7 +58,22 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+
+    # Local apps
+    'apps.accounts',
+    'apps.tickets',
+    'apps.notifications',
+    'apps.clients',
 ]
+
+# Custom User Model
+AUTH_USER_MODEL = 'accounts.CustomUser'
+
+# Login/Logout redirects
+LOGIN_URL = 'accounts:login'
+LOGIN_REDIRECT_URL = 'tickets:dashboard'   # abhi ke liye placeholder, BE-03 mein banna ha
+# LOGIN_REDIRECT_URL = '/admin/'
+LOGOUT_REDIRECT_URL = 'accounts:login'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -49,14 +83,27 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apps.clients.middleware.TenantWhitelistMiddleware',
 ]
+
+# Tenant Whitelist Middleware Configuration
+TENANT_WHITELIST_EXEMPT_PATHS = [
+    '/admin/',
+    '/static/',
+    '/media/',
+    '/accounts/',
+    '/dashboard/clients/',
+    "/api/admin/clients/onboard/",
+]
+
+
 
 ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -76,12 +123,27 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'internal_ticketing_db',
+        'USER': 'postgres',
+        'PASSWORD': 'root',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
-
+# settings.py
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day',
+        'onboarding': '10/minute',  # <--- Yeh line task BE6 ke liye lazmi hai
+    }
+}
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 
@@ -117,7 +179,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
-
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
@@ -126,4 +189,27 @@ MAILERS = {
     'default': {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
+}
+# settings.py
+
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+
+# Redis connection parameters mein protocol version 2 force karein
+CELERY_REDIS_BACKEND_SETTINGS = {
+    'protocol_version': 2
+}
+
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'protocol_version': 2,
+    'redis_connect_kwargs': {
+        'protocol': 2
+    }
+}
+
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+    'protocol_version': 2,
+    'redis_connect_kwargs': {
+        'protocol': 2
+    }
 }

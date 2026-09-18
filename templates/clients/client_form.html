@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ form_title }} — DevLogix{% endblock %}
+
+{% block content %}
+<style>
+  .form-card {
+    border-radius: 16px;
+    border: none;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .form-card .card-header {
+    border-radius: 16px 16px 0 0;
+    background: linear-gradient(135deg, var(--devlogix-navy) 0%, #1e3a5f 100%);
+    color: #fff;
+    padding: 1.2rem 1.5rem;
+  }
+  .field-error { font-size: .8rem; color: #dc3545; margin-top: .25rem; }
+  .form-label  { font-weight: 600; font-size: .85rem; color: var(--devlogix-navy); }
+  .help-text   { font-size: .75rem; color: var(--devlogix-gray); margin-top: .2rem; }
+  .is-invalid-field .form-control,
+  .is-invalid-field .form-select { border-color: #dc3545; }
+</style>
+
+<div class="container py-5">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'clients:list' %}" class="text-decoration-none">Tenant Management</a>
+      </li>
+      {% if client %}
+      <li class="breadcrumb-item">
+        <a href="{% url 'clients:detail' client.pk %}" class="text-decoration-none">{{ client.name }}</a>
+      </li>
+      {% endif %}
+      <li class="breadcrumb-item active">{{ form_title }}</li>
+    </ol>
+  </nav>
+
+  <div class="card shadow form-card">
+    <!-- Header -->
+    <div class="card-header d-flex align-items-center gap-2">
+      <span style="font-size:1.5rem;">🏢</span>
+      <div>
+        <h5 class="mb-0 fw-bold">{{ form_title }}</h5>
+        <small class="opacity-75">All fields marked * are required</small>
+      </div>
+    </div>
+
+    <div class="card-body p-4">
+      <div id="api-alert-container"></div>
+
+      <form method="post" novalidate id="client-form">
+        {% csrf_token %}
+
+        <!-- Client Name -->
+        <div class="mb-3">
+          <label for="client_name" class="form-label">
+            Client Name <span class="text-danger">*</span>
+          </label>
+          <input type="text" name="client_name" id="client_name" class="form-control" placeholder="e.g. Acme Corp" required>
+        </div>
+
+        <!-- Contact Name -->
+        <div class="mb-3">
+          <label for="contact_name" class="form-label">
+            Contact Person Name <span class="text-danger">*</span>
+          </label>
+          <input type="text" name="contact_name" id="contact_name" class="form-control" placeholder="e.g. John Doe" required>
+        </div>
+
+        <!-- Contact Email -->
+        <div class="mb-3">
+          <label for="contact_email" class="form-label">
+            Contact Email <span class="text-danger">*</span>
+          </label>
+          <input type="email" name="contact_email" id="contact_email" class="form-control" placeholder="e.g. john@example.com" required>
+        </div>
+
+        <!-- Domain Name -->
+        <div class="mb-3">
+          <label for="domain_name" class="form-label">Whitelisted Domain Name</label>
+          <input type="text" name="domain_name" id="domain_name" class="form-control" placeholder="e.g. acme.com">
+          <div class="help-text">Domain to automatically whitelist for this client tenant.</div>
+        </div>
+
+        <!-- Enforce Whitelisting (Grace Mode Toggle) -->
+        <div class="mb-4 p-3 rounded bg-light border">
+          <div class="form-check form-switch mb-1">
+            <input type="checkbox" class="form-check-input" id="enforce_whitelisting" name="enforce_whitelisting" checked>
+            <label class="form-check-label fw-bold" for="enforce_whitelisting">
+              🔒 Enforce Whitelisting (Strict Mode)
+            </label>
+          </div>
+          <div class="help-text text-muted mb-0">
+            <strong>Checked (Default):</strong> Strictly blocks non-whitelisted IP addresses and domains with a <code>403 Forbidden</code>.<br>
+            <strong>Unchecked (Grace Mode):</strong> Allows incoming requests from non-whitelisted IPs/domains, recording each attempt in the access audit log as <code>PASSED</code>.
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="d-flex gap-2 justify-content-end border-top pt-3">
+          <a href="{% url 'clients:list' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary px-4" id="submit-client-form">
+            {{ submit_label|default:"Onboard Client" }}
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div><!-- /card -->
+
+</div><!-- /container -->
+
+<!-- AJAX JS Script for Onboarding API Integration -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("client-form");
+    const submitBtn = document.getElementById("submit-client-form");
+    const alertContainer = document.getElementById("api-alert-container");
+
+    if (form) {
+        form.addEventListener("submit", async function (e) {
+            e.preventDefault();
+            alertContainer.innerHTML = "";
+
+            const payload = {
+                client_name: document.getElementById("client_name").value.trim(),
+                contact_name: document.getElementById("contact_name").value.trim(),
+                contact_email: document.getElementById("contact_email").value.trim(),
+                domain_name: document.getElementById("domain_name").value.trim()
+            };
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = "Processing...";
+
+            try {
+                const response = await fetch("/api/admin/clients/onboard/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.status === 201) {
+                    alertContainer.innerHTML = `<div class="alert alert-success">Client onboarded successfully!</div>`;
+                    setTimeout(() => {
+                        window.location.href = "{% url 'clients:list' %}";
+                    }, 1200);
+                } else if (response.status === 429) {
+                    alertContainer.innerHTML = `<div class="alert alert-danger"><strong>Rate Limit Exceeded:</strong> You have reached the limit of 10 requests per minute. Please try again in a minute.</div>`;
+                } else {
+                    alertContainer.innerHTML = `<div class="alert alert-danger"><strong>Error:</strong> ${data.error || 'Failed to onboard client.'}</div>`;
+                }
+            } catch (err) {
+                alertContainer.innerHTML = `<div class="alert alert-danger">Network error. Please try again.</div>`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = "{{ submit_label|default:'Onboard Client' }}";
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

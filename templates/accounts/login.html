@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h3 class="mb-4 text-center">Login</h3>
+                
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        {{ form.username }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        {{ form.password }}
+                    </div>
+                    {% if form.errors %}
+                        <div class="alert alert-danger">Invalid username or password.</div>
+                    {% endif %}
+                    <button type="submit" class="btn btn-devlogix w-100">Login</button>
+                </form>
+
+                <!-- ======================================================== -->
+                <!-- TASK BE4: PASSWORDLESS MAGIC LINK OPTION                 -->
+                <!-- ======================================================== -->
+                <div class="mt-4 text-center">
+                    <div class="position-relative mb-3">
+                        <hr class="text-muted">
+                        <span class="position-absolute top-50 start-50 translate-middle bg-white px-2 text-muted small">OR</span>
+                    </div>
+                    <a href="{% url 'accounts:magic_link_request' %}" class="btn btn-outline-secondary w-100 fw-semibold">
+                        ✉️ Login with Magic Link
+                    </a>
+                </div>
+
+                <p class="mt-4 text-center mb-0">
+                    Don't have an account? <a href="{% url 'accounts:signup' %}">Sign up</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

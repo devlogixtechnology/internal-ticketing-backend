@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Internal Ticketing Hub{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --devlogix-teal: #0f8a7d;
+            --devlogix-teal-dark: #0b6e64;
+            --devlogix-navy: #14213d;
+            --devlogix-gray: #6b7280;
+        }
+        body {
+            background-color: #f8f9fa;
+            color: var(--devlogix-navy);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        .navbar-devlogix {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 14px 0;
+        }
+        .navbar-devlogix .navbar-brand {
+            color: var(--devlogix-navy);
+            font-weight: 700;
+            font-size: 1.4rem;
+            letter-spacing: -0.5px;
+        }
+        .navbar-devlogix .navbar-brand span {
+            color: var(--devlogix-teal);
+        }
+        .btn-devlogix {
+            background-color: var(--devlogix-teal);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 20px;
+            font-weight: 500;
+        }
+        .btn-devlogix:hover {
+            background-color: var(--devlogix-teal-dark);
+            color: #fff;
+        }
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+        }
+        .stat-number {
+            color: var(--devlogix-teal);
+            font-weight: 700;
+        }
+        .badge-status-open { background-color: #fef3c7; color: #92400e; }
+        .badge-status-in-progress { background-color: #dbeafe; color: #1e40af; }
+        .badge-status-resolved { background-color: #d1fae5; color: #065f46; }
+        .badge-status-closed { background-color: #e5e7eb; color: #374151; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-devlogix">
+        <div class="container">
+            <a class="navbar-brand" href="#">DEV<span>LOGIX</span> | Ticketing Hub</a>
+            {% if user.is_authenticated %}
+                <div class="d-flex align-items-center gap-3">
+
+                    <!-- 🔔 Notification Bell -->
+                    <div class="dropdown">
+                        <a href="#" class="position-relative text-dark text-decoration-none fs-5" role="button"
+                           data-bs-toggle="dropdown" aria-expanded="false" id="notifBell">
+                            🔔
+                            <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">
+                                0
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm p-2" style="width: 320px; max-height: 400px; overflow-y: auto;" id="notifDropdownList">
+                            <li class="text-center text-muted small py-2">Loading...</li>
+                        </ul>
+                    </div>
+
+                    <span class="text-muted small">{{ user.username }} ({{ user.get_role_display }})</span>
+                    <a href="{% url 'accounts:logout' %}" class="btn btn-outline-dark btn-sm">Logout</a>
+                </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+    {% if user.is_authenticated %}
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    async function loadNotifications() {
+        try {
+            const response = await fetch("{% url 'notifications:unread_list' %}");
+            const data = await response.json();
+
+            const badge = document.getElementById('notifBadge');
+            const list = document.getElementById('notifDropdownList');
+
+            if (data.unread_count > 0) {
+                badge.textContent = data.unread_count;
+                badge.classList.remove('d-none');
+            } else {
+                badge.classList.add('d-none');
+            }
+
+            if (data.notifications.length === 0) {
+                list.innerHTML = '<li class="text-center text-muted small py-3">No new notifications</li>';
+                return;
+            }
+
+            list.innerHTML = data.notifications.map(n => `
+                <li class="mb-1">
+                    <a href="#" class="dropdown-item small border-bottom py-2" onclick="markAsRead(event, ${n.id})">
+                        <div class="fw-semibold">${n.title}</div>
+                        <div class="text-muted">${n.message}</div>
+                    </a>
+                </li>
+            `).join('');
+        } catch (err) {
+            console.error("Notification load error:", err);
+        }
+    }
+
+    async function markAsRead(event, notificationId) {
+        event.preventDefault();
+        try {
+            await fetch(`/notifications/api/${notificationId}/read/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') }
+            });
+            loadNotifications();
+        } catch (err) {
+            console.error("Mark read error:", err);
+        }
+    }
+
+    // Page load hote hi aur har 30 seconds mein refresh karein
+    loadNotifications();
+    setInterval(loadNotifications, 30000);
+    {% endif %}
+    </script>
+</body>
+</html>

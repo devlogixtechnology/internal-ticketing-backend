@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block title %}Tenant & Whitelist Management — DevLogix{% endblock %}
+
+{% block content %}
+<style>
+  .stat-card {
+    border-radius: 14px;
+    border: none;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.1); }
+  .section-header {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--devlogix-gray);
+  }
+  .client-table td, .client-table th { vertical-align: middle; }
+  .badge-active   { background-color: #d1fae5; color: #065f46; border-radius: 20px; padding: 4px 12px; }
+  .badge-inactive { background-color: #fee2e2; color: #991b1b; border-radius: 20px; padding: 4px 12px; }
+  .action-btn { font-size: .8rem; padding: 4px 12px; border-radius: 8px; }
+  .btn-teal { background-color: var(--devlogix-teal); color:#fff; border:none; }
+  .btn-teal:hover { background-color: var(--devlogix-teal-dark); color:#fff; }
+</style>
+
+<div class="container-fluid py-4">
+
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="fw-bold mb-0">🏢 Tenant &amp; Whitelist Management</h2>
+      <p class="text-muted small mb-0">Manage client tenants, contacts, whitelisted domains and IPs</p>
+    </div>
+    <a href="{% url 'clients:create' %}" class="btn btn-teal fw-semibold shadow-sm" id="btn-add-client">
+      + Add New Client
+    </a>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3 shadow-sm border-start border-4 border-primary">
+        <span class="section-header">Total Clients</span>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_clients|default:clients.count }}</h2>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3 shadow-sm border-start border-4 border-success">
+        <span class="section-header">Active Clients</span>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ active_clients|default:0 }}</h2>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3 shadow-sm border-start border-4 border-info">
+        <span class="section-header">Whitelisted Domains</span>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_domains|default:0 }}</h2>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3 shadow-sm border-start border-4 border-warning">
+        <span class="section-header">Whitelisted IPs</span>
+        <h2 class="fw-bold mb-0 mt-1 stat-number">{{ total_ips|default:0 }}</h2>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clients Table -->
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+      <h5 class="fw-bold mb-0">👥 All Clients</h5>
+      <span class="badge bg-light text-dark border">Admin Control</span>
+    </div>
+    <div class="card-body p-0">
+      {% if clients %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 client-table" id="clients-table">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4">#</th>
+              <th>Client Name</th>
+              <th>Code</th>
+              <th>Status</th>
+              <th class="text-center">Contacts</th>
+              <th class="text-center">Domains</th>
+              <th class="text-center">IPs</th>
+              <th>Created</th>
+              <th class="text-end pe-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for client in clients %}
+            <tr id="client-row-{{ client.pk }}">
+              <td class="ps-4 text-muted small">{{ forloop.counter }}</td>
+              <td>
+                <a href="{% url 'clients:detail' client.pk %}" class="fw-semibold text-decoration-none text-dark">
+                  {{ client.name }}
+                </a>
+              </td>
+              <td><code class="bg-light px-2 py-1 rounded small">{{ client.code }}</code></td>
+              <td>
+                {% if client.is_active %}
+                  <span class="badge-active fw-semibold small">Active</span>
+                {% else %}
+                  <span class="badge-inactive fw-semibold small">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <span class="badge bg-secondary rounded-pill">{{ client.contacts.count }}</span>
+              </td>
+              <td class="text-center">
+                <span class="badge bg-info text-dark rounded-pill">{{ client.whitelisted_domains.count }}</span>
+              </td>
+              <td class="text-center">
+                <span class="badge bg-warning text-dark rounded-pill">{{ client.whitelisted_ips.count }}</span>
+              </td>
+              <td class="text-muted small">{{ client.created_at|date:"d M Y" }}</td>
+              <td class="text-end pe-4">
+                <div class="d-flex gap-1 justify-content-end">
+                  <a href="{% url 'tickets:dashboard' %}?client={{ client.pk }}"
+                     class="btn btn-outline-info action-btn" title="View Client Tickets">
+                    🎟️ Tickets
+                  </a>
+                  <a href="{% url 'clients:detail' client.pk %}"
+                     class="btn btn-outline-primary action-btn" title="View Details">
+                    👁 View
+                  </a>
+                  <a href="{% url 'clients:edit' client.pk %}"
+                     class="btn btn-outline-secondary action-btn" title="Edit Client">
+                    ✏️ Edit
+                  </a>
+                  <button type="button"
+                          class="btn btn-outline-danger action-btn"
+                          data-bs-toggle="modal"
+                          data-bs-target="#deleteModal-{{ client.pk }}"
+                          title="Delete Client">
+                    🗑️
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 text-muted">
+        <div style="font-size:3rem;">🏢</div>
+        <p class="fw-semibold mt-2">No clients yet.</p>
+        <a href="{% url 'clients:create' %}" class="btn btn-teal mt-1">+ Add First Client</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /container-fluid -->
+
+<!-- Delete Confirmation Modals -->
+{% for client in clients %}
+<div class="modal fade" id="deleteModal-{{ client.pk }}" tabindex="-1"
+     aria-labelledby="deleteModalLabel-{{ client.pk }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="deleteModalLabel-{{ client.pk }}">⚠️ Delete Client</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">
+          Are you sure you want to delete <strong>{{ client.name }}</strong>?<br>
+          <span class="text-danger small">
+            This will permanently remove all associated contacts, whitelisted domains, and IPs.
+          </span>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="post" action="{% url 'clients:delete' client.pk %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger" id="confirm-delete-{{ client.pk }}">
+            Yes, Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}
