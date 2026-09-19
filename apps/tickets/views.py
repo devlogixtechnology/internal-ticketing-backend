@@ -18,7 +18,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from apps.clients.models import WhitelistedEmergencyEmail, Client
 from apps.notifications.models import Notification
 from apps.accounts.models import CustomUser
-from .models import Ticket, TicketHistory, Category, TicketAttachment, ServerHealthLog
+from .models import Ticket, TicketHistory, Category, TicketAttachment, ServerHealthLog,TicketComment, CommentAttachment
+
 from .tasks import send_ticket_assigned_email, send_status_update_email  # Celery Tasks
 
 User = get_user_model()
@@ -34,9 +35,6 @@ from .serializers import TicketSerializer
 User = get_user_model()
 
 
-# ---------------------------------------------------------
-# HELPER: DRF & Template Level Queryset Scoping
-# ---------------------------------------------------------
 def _visible_tickets_for_user(user):
     """
     Client-scoped Querysets:
@@ -442,9 +440,47 @@ def dashboard(request):
     return render(request, 'tickets/dashboard.html', context)
 @login_required
 def ticket_detail(request, ticket_id):
-    ticket = get_object_or_404(_visible_tickets_for_user(request.user), id=ticket_id)
-    return render(request, 'tickets/detail.html', {'ticket': ticket})
+    ticket = get_object_or_404(Ticket, pk=ticket_id)
+    
+    # Support agents ya Staff users ko fetch karein dropdown ke liye
+    support_agents = User.objects.filter(is_staff=True) # ya User.objects.filter(role__in=['ADMIN', 'SUPPORT'])
+    
+    if request.user.is_staff or getattr(request.user, 'role', '') in ['ADMIN', 'SUPPORT']:
+        comments = ticket.comments.all().order_by('created_at')
+    else:
+        comments = ticket.comments.filter(is_internal=False).order_by('created_at')
 
+    return render(request, 'ticket_detail.html', {
+        'ticket': ticket,
+        'comments': comments,
+        'support_agents': support_agents,  # <-- Ye pass hona zaroori hai dropdown ke liye
+    })
+
+@login_required
+def add_comment(request, ticket_id):
+    ticket = get_object_or_404(Ticket, pk=ticket_id)
+    
+    if request.method == 'POST':
+        comment_text = request.POST.get('body')
+        is_internal = request.POST.get('is_internal') == 'on'
+        
+        if is_internal and not (request.user.is_staff or getattr(request.user, 'role', '') in ['ADMIN', 'SUPPORT']):
+            is_internal = False
+
+        # Agar aapke model mein field ka naam 'content' ya 'message' hai:
+        comment = TicketComment.objects.create(
+            ticket=ticket,
+            author=request.user,
+            body=comment_text,  # <--- Yahan Model ki exact field key pass karein
+            is_internal=is_internal
+        )
+
+        files = request.FILES.getlist('attachments')
+        for f in files:
+            CommentAttachment.objects.create(comment=comment, file=f)
+
+        messages.success(request, "Reply added successfully!")
+        return redirect('tickets:ticket_detail', ticket_id=ticket.id)
 
 @login_required
 def assign_support(request, ticket_id):
@@ -522,13 +558,21 @@ def emergency_whitelists(request):
 
 @login_required
 def active_tickets(request):
-    # Status jo active hain
+    # Active statuses
     active_statuses = ['OPEN', 'IN_PROGRESS']
     
-    # Critical priority waali tickets ko pehle order karna
+    # Critical priority wali tickets ko top par prioritize karna
     tickets = Ticket.objects.filter(status__in=active_statuses).order_by(
         Case(When(priority='CRITICAL', then=Value(0)), default=Value(1)),
         '-created_at'
     )
     
-    return render(request, 'tickets/active_tickets.html', {'tickets': tickets})
+    # Support Agents / Staff fetch karein
+    support_agents = User.objects.filter(role='SUPPORT')
+    if not support_agents.exists():
+        support_agents = User.objects.filter(is_staff=True)
+
+    return render(request, 'tickets/active_tickets.html', {
+        'tickets': tickets,
+        'support_agents': support_agents, # <-- Dynamic list pass ki gayi hai
+    })

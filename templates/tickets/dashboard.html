@@ -29,6 +29,8 @@
 
         <!-- Dynamic Action Buttons -->
         <div class="d-flex gap-2">
+            <!-- Active Support Tickets Button (Available for Support Agents, Admin, Superuser, and Employees) -->
+            {% if user_role == 'SUPPORT' or user_role == 'ADMIN' or user.is_superuser or user_role == 'EMPLOYEE' or user.is_staff %}
             <a href="{% url 'tickets:active_tickets' %}" class="btn btn-primary fw-bold shadow-sm position-relative">
                 <i class="bi bi-ticket-detailed-fill me-1"></i> Active Support Tickets
                 {% if total_count > 0 %}
@@ -37,6 +39,7 @@
                     </span>
                 {% endif %}
             </a>
+            {% endif %}
 
             {% if user_role == 'ADMIN' or user.is_superuser or user.is_staff %}
             <a href="{% url 'accounts:api_keys' %}" class="btn btn-outline-dark fw-semibold shadow-sm">

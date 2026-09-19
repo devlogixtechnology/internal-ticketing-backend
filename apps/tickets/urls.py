@@ -12,7 +12,7 @@ urlpatterns = [
     # Template Views
     path('dashboard/', views.dashboard, name='dashboard'),
     path('<int:ticket_id>/', views.ticket_detail, name='detail'),
-    path('tickets/<int:ticket_id>/assign/', views.assign_support, name='assign'),
+   path('<int:ticket_id>/assign/', views.assign_support, name='assign_support'),
     path('server-health/', views.server_health_dashboard, name='server_health_dashboard'),
 
     # DRF API Endpoints
@@ -24,6 +24,8 @@ urlpatterns = [
     path('api/categories/create/', views.create_category_api, name='create_category'),
     path('emergency-whitelists/', views.emergency_whitelists, name='emergency_whitelists'),
     path('ticket/<int:ticket_id>/', views.ticket_detail, name='ticket_detail'),
+  
+    path('tickets/<int:ticket_id>/comment/', views.add_comment, name='add_comment'),
     path('active-tickets/', views.active_tickets, name='active_tickets'), # Naya route
     # Include DRF Router URLs
     path('', include(router.urls)),

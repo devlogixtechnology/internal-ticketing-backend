@@ -8,20 +8,30 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 
-from apps.tickets.models import Ticket, Category, TicketAttachment
+from apps.tickets.models import Ticket, Category, TicketAttachment, TicketComment
 from apps.clients.models import WhitelistedEmergencyEmail
 
 User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Ingests unread emails from the dedicated support IMAP mailbox and creates tickets with attachments."
+    help = "Ingests unread emails from the dedicated support IMAP mailbox, threads replies to existing tickets, or creates new tickets with attachments."
 
     def clean_html(self, raw_html):
         """Simple helper to strip basic HTML tags if plain text is missing."""
         cleanr = re.compile('<.*?>')
         cleantext = re.sub(cleanr, '', raw_html)
         return cleantext.strip()
+
+    def extract_ticket_id(self, subject):
+        """
+        Subject se '[Ticket #123]' ya '[Ticket #45]' pattern match karke Ticket ID extract karta hai.
+        """
+        pattern = r'\[Ticket\s*#(\d+)\]'
+        match = re.search(pattern, subject, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return None
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.NOTICE("Starting inbound email ingestion with body & attachment parsing..."))
@@ -150,41 +160,83 @@ class Command(BaseCommand):
                             if matched_emergency_entry:
                                 is_whitelisted = True
 
-                        ticket_title = f"{'[EMERGENCY] ' if is_whitelisted else ''}{subject or 'Inbound Email Ticket'}"
-                        ticket_desc = (
-                            f"From: {from_address}\n"
-                            f"Emergency Whitelisted: {is_whitelisted}\n"
-                            f"Purpose: {matched_emergency_entry.purpose if matched_emergency_entry else 'N/A'}\n\n"
-                            f"{final_body}"
-                        )
+                        # =========================================================
+                        # TASK 5: REPLY THREADING LOGIC
+                        # =========================================================
+                        existing_ticket_id = self.extract_ticket_id(subject)
+                        existing_ticket = None
 
-                        # Create Ticket
-                        ticket = Ticket.objects.create(
-                            title=ticket_title[:255],
-                            description=ticket_desc,
-                            category=default_category,
-                            created_by=system_user,
-                            status="OPEN",
-                            priority="CRITICAL" if is_whitelisted else "MEDIUM"
-                        )
+                        if existing_ticket_id:
+                            existing_ticket = Ticket.objects.filter(id=existing_ticket_id).first()
 
-                        # Save extracted Attachments/Inline Images into TicketAttachment Model
-                        saved_attachments_count = 0
-                        for fname, content in attachments_data:
-                            django_file = ContentFile(content, name=fname)
-                            TicketAttachment.objects.create(
-                                ticket=ticket,
-                                file=django_file,
-                                uploaded_by=system_user  # <-- Yeh line yahan majood honi chahiye
+                        if existing_ticket:
+                            # 1. Existing Ticket Found -> Append as Comment
+                            comment_text = (
+                                f"--- Email Reply Received ---\n"
+                                f"From: {from_address}\n\n"
+                                f"{final_body}"
                             )
-                            saved_attachments_count += 1
-                        
-                        self.stdout.write(
-                            self.style.SUCCESS(
-                                f"✓ Created Ticket ID #{ticket.id} for '{from_address}' "
-                                f"(Emergency: {is_whitelisted}, Attachments Saved: {saved_attachments_count})"
+                            
+                            TicketComment.objects.create(
+                                ticket=existing_ticket,
+                                author=system_user,
+                                comment=comment_text
                             )
-                        )
+
+                            # Save attachments directly linked to existing ticket
+                            saved_attachments_count = 0
+                            for fname, content in attachments_data:
+                                django_file = ContentFile(content, name=fname)
+                                TicketAttachment.objects.create(
+                                    ticket=existing_ticket,
+                                    file=django_file,
+                                    uploaded_by=system_user
+                                )
+                                saved_attachments_count += 1
+
+                            self.stdout.write(
+                                self.style.SUCCESS(
+                                    f"✓ Appended Reply as Comment to Ticket #{existing_ticket.id} from '{from_address}' "
+                                    f"(Attachments Saved: {saved_attachments_count})"
+                                )
+                            )
+
+                        else:
+                            # 2. No Existing Ticket Found -> Create New Ticket
+                            ticket_title = f"{'[EMERGENCY] ' if is_whitelisted else ''}{subject or 'Inbound Email Ticket'}"
+                            ticket_desc = (
+                                f"From: {from_address}\n"
+                                f"Emergency Whitelisted: {is_whitelisted}\n"
+                                f"Purpose: {matched_emergency_entry.purpose if matched_emergency_entry else 'N/A'}\n\n"
+                                f"{final_body}"
+                            )
+
+                            ticket = Ticket.objects.create(
+                                title=ticket_title[:255],
+                                description=ticket_desc,
+                                category=default_category,
+                                created_by=system_user,
+                                status="OPEN",
+                                priority="CRITICAL" if is_whitelisted else "MEDIUM"
+                            )
+
+                            # Save extracted Attachments/Inline Images into TicketAttachment Model
+                            saved_attachments_count = 0
+                            for fname, content in attachments_data:
+                                django_file = ContentFile(content, name=fname)
+                                TicketAttachment.objects.create(
+                                    ticket=ticket,
+                                    file=django_file,
+                                    uploaded_by=system_user
+                                )
+                                saved_attachments_count += 1
+                            
+                            self.stdout.write(
+                                self.style.SUCCESS(
+                                    f"✓ Created New Ticket ID #{ticket.id} for '{from_address}' "
+                                    f"(Emergency: {is_whitelisted}, Attachments Saved: {saved_attachments_count})"
+                                )
+                            )
 
             self.stdout.write(self.style.SUCCESS("Email ingestion batch completed successfully."))
 

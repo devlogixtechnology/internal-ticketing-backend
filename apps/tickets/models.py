@@ -3,8 +3,9 @@ from django.core.validators import FileExtensionValidator
 from django.core.exceptions import ValidationError
 from django.db import models
 from apps.accounts.models import CustomUser
+from django.conf import settings
 
-
+from django.contrib.auth.models import User
 class Category(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
@@ -92,17 +93,15 @@ class Ticket(models.Model):
 
 class TicketComment(models.Model):
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='comments')
-    author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    comment = models.TextField()
-    is_internal = models.BooleanField(default=False)  # Support/Admin internal notes
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Is field ka name Check Karein (Must be 'body')
+    body = models.TextField()  
+    
+    is_internal = models.BooleanField(default=False)
+    is_email_reply = models.BooleanField(default=False)
+    sender_email = models.EmailField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['created_at']
-
-    def __str__(self):
-        return f"Comment by {self.author} on Ticket #{self.ticket_id}"
-
 
 class TicketHistory(models.Model):
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='history')
@@ -166,3 +165,9 @@ class ServerHealthLog(models.Model):
 
     def __str__(self):
         return f"Health Log ({self.timestamp.strftime('%Y-%m-%d %H:%M')}) - CPU: {self.cpu_usage}%"
+
+
+
+class CommentAttachment(models.Model):
+    comment = models.ForeignKey(TicketComment, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='comment_attachments/')

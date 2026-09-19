@@ -6,7 +6,7 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="fw-bold mb-0">🎟️ Active Support & Email Tickets</h2>
+            <h2 class="fw-bold mb-0"> Active Support & Email Tickets</h2>
             <p class="text-muted small mb-0">Total {{ tickets|length }} tickets loaded in queue.</p>
         </div>
         <a href="{% url 'tickets:dashboard' %}" class="btn btn-outline-secondary fw-semibold">
@@ -83,17 +83,25 @@
                                 </span>
                             </td>
                             <td><span class="text-muted">{{ ticket.created_by.username }}</span></td>
+                            
+                            <!-- UPDATED: Assigned To Column with Quick Assign Dropdown -->
                             <td>
-                                {% if ticket.assigned_to %}
-                                    <span class="badge bg-soft-primary text-primary border border-primary">
-                                        {{ ticket.assigned_to.username }}
-                                    </span>
-                                {% else %}
-                                    <span class="text-muted fst-italic">Unassigned</span>
-                                {% endif %}
+                                <form action="{% url 'tickets:assign_support' ticket.id %}" method="POST" class="d-flex align-items-center gap-1">
+                                    {% csrf_token %}
+                                    <select name="support_agent_id" class="form-select form-select-sm" style="min-width: 140px;" onchange="this.form.submit()">
+                                        <option value="">-- Assign Agent --</option>
+                                        {% for agent in support_agents %}
+                                            <option value="{{ agent.id }}" {% if ticket.assigned_to and ticket.assigned_to.id == agent.id %}selected{% endif %}>
+                                                {{ agent.username }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </form>
                             </td>
+
+                            <!-- UPDATED: Actions Column -->
                             <td class="text-end">
-                                <a href="{% url 'tickets:ticket_detail' ticket.id %}" class="btn btn-sm btn-outline-dark me-1 fw-semibold">
+                                <a href="{% url 'tickets:ticket_detail' ticket.id %}" class="btn btn-sm btn-outline-dark fw-semibold">
                                     View Details
                                 </a>
                             </td>

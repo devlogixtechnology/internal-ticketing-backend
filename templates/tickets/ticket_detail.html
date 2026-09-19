@@ -2,9 +2,10 @@
 
 {% block content %}
 <div class="container my-4">
-    <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary mb-3">← Back to Dashboard</a>
+    <a href="{% url 'tickets:dashboard' %}" class="btn btn-sm btn-outline-secondary mb-3">← Back to Dashboard</a>
 
-    <div class="card border-0 shadow">
+    <!-- Main Ticket Info Card -->
+    <div class="card border-0 shadow mb-4">
         <div class="card-header {% if ticket.priority == 'CRITICAL' %}bg-danger text-white{% else %}bg-dark text-white{% endif %} p-3">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0 fw-bold">{% if ticket.priority == 'CRITICAL' %}🚨 {% endif %}Ticket #{{ ticket.id }}: {{ ticket.title }}</h4>
@@ -52,10 +53,130 @@
                     </div>
                 {% empty %}
                     <div class="col-12">
-                        <p class="text-muted small">no ticket attachments uploaded</p>
+                        <p class="text-muted small">No ticket attachments uploaded</p>
                     </div>
                 {% endfor %}
             </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         TASK 5: COMMENTS & EMAIL THREAD STREAM 
+         ========================================== -->
+    <div class="card border-0 shadow mb-4">
+        <div class="card-header bg-light py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                💬 Communication & Activity Stream
+            </h5>
+            <span class="badge bg-secondary">{{ ticket.comments.all|length }} Message(s)</span>
+        </div>
+        <div class="card-body p-4">
+            <!-- Alert Messages Block -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show mb-4" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- Comments Timeline Stream -->
+            <div class="d-flex flex-column gap-3">
+                {% for comment in ticket.comments.all %}
+                    <!-- Styling conditionally based on Internal Note / Email Inbound / Web Comment -->
+                    <div class="card border {% if comment.is_internal %}border-warning bg-warning-subtle{% elif comment.is_email_reply %}border-info bg-light{% else %}border-light-subtle{% endif %} shadow-sm">
+                        <div class="card-body py-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <strong class="text-dark">
+                                        {% if comment.author %}
+                                            {{ comment.author.username }}
+                                        {% else %}
+                                            {{ comment.sender_email|default:"External User" }}
+                                        {% endif %}
+                                    </strong>
+
+                                    <!-- Internal Note Badge -->
+                                    {% if comment.is_internal %}
+                                        <span class="badge bg-warning text-dark border border-warning">🔒 Internal Note</span>
+                                    {% endif %}
+
+                                    <!-- Email Reply Badge -->
+                                    {% if comment.is_email_reply %}
+                                        <span class="badge bg-info text-dark">📧 via Email</span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">{{ comment.created_at|date:"d M Y, h:i A" }}</small>
+                            </div>
+
+                            <p class="card-text mb-2 text-secondary" style="white-space: pre-line;">{{ comment.body }}</p>
+
+                            <!-- Comment Level Attachments (if any) -->
+                            {% if comment.attachments.all %}
+                                <div class="mt-2 pt-2 border-top">
+                                    <small class="fw-bold text-muted d-block mb-1">Attachments:</small>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        {% for att in comment.attachments.all %}
+                                            <a href="{{ att.file.url }}" target="_blank" class="btn btn-sm btn-light border text-truncate" style="max-width: 200px;">
+                                                📎 {{ att.file.name|slice:"19:" }}
+                                            </a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="text-center py-4 text-muted">
+                        <p class="mb-0">No responses or notes on this ticket yet.</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         TASK 5: ADD REPLY / INTERNAL NOTE FORM 
+         ========================================== -->
+    <div class="card border-0 shadow">
+        <div class="card-header bg-dark text-white py-3">
+            <h5 class="fw-bold mb-0">Post a Reply or Note</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" action="{% url 'tickets:add_comment' ticket.id %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="commentBody" class="form-label fw-bold">Message / Reply Text</label>
+                    <textarea name="body" id="commentBody" rows="4" class="form-control" placeholder="Type your response or details here..." required></textarea>
+                </div>
+
+                <div class="row g-3 align-items-center mb-3">
+                    <div class="col-md-6">
+                        <label for="commentAttachments" class="form-label fw-bold">Attach Files (Optional)</label>
+                        <input type="file" name="attachments" id="commentAttachments" class="form-control" multiple>
+                    </div>
+
+                    <!-- Internal Note Checkbox (Only for Admin / Support Users) -->
+                    {% if user.is_staff or user.role == 'ADMIN' or user.role == 'SUPPORT' %}
+                    <div class="col-md-6 pt-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="is_internal" id="isInternal">
+                            <label class="form-check-label fw-bold text-warning-emphasis" for="isInternal">
+                                🔒 Mark as Internal Note (Staff & Admins only)
+                            </label>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary fw-bold px-4">
+                        Submit Response
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
